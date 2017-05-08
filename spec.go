@@ -11,6 +11,10 @@ func (g G) Pend(text string, f func(), _ ...Option) {
 	g(text, f, func(c *config) { c.pend = true })
 }
 
+func (g G) Focus(text string, f func(), opts ...Option) {
+	g(text, f, append(opts, func(c *config) { c.focus = true })...)
+}
+
 type S func(string, func(), ...Option)
 
 func (s S) Before(f func()) {
@@ -25,15 +29,20 @@ func (s S) Pend(text string, f func(), _ ...Option) {
 	s(text, f, func(c *config) { c.pend = true })
 }
 
+func (s S) Focus(text string, f func(), opts ...Option) {
+	s(text, f, append(opts, func(c *config) { c.focus = true })...)
+}
+
 func Run(t *testing.T, f func(*testing.T, G, S), opts ...Option) bool {
 	success := true
+	specs, focused := parse(f, opts...)
 
-	for _, s := range parse(f, opts...) {
+	for _, s := range specs {
 		s := s
 		name := strings.Join(s.name, "/")
 		success = success && t.Run(name, func(t *testing.T) {
 			switch {
-			case s.pend:
+			case s.pend, focused && !s.focus:
 				t.SkipNow()
 			case s.parallel:
 				t.Parallel()
@@ -88,23 +97,24 @@ func run(fs ...func()) {
 type specInfo struct {
 	name     []string
 	pend     bool
+	focus    bool
 	parallel bool
 	groups   []uint64
 	index    uint64
 }
 
-func parse(f func(*testing.T, G, S), opts ...Option) []specInfo {
+func parse(f func(*testing.T, G, S), opts ...Option) (specs []specInfo, focused bool) {
 	type groupInfo struct {
 		text       string
 		pend       bool
+		focus      bool
 		parallel   bool
 		groupIndex uint64
 		specIndex  uint64
 	}
 
 	var (
-		parallel   = options(opts).apply().parallel
-		specs      []specInfo
+		global     = options(opts).apply()
 		groups     []groupInfo
 		groupIndex uint64 // does this really work?
 		specIndex  uint64
@@ -113,8 +123,12 @@ func parse(f func(*testing.T, G, S), opts ...Option) []specInfo {
 	f(nil, func(text string, f func(), opts ...Option) {
 		cfg := options(opts).apply()
 		groups = append(groups, groupInfo{
-			text, cfg.pend,cfg.parallel || parallel,
-			groupIndex, specIndex,
+			text:       text,
+			pend:       cfg.pend,
+			focus:      cfg.focus,
+			parallel:   cfg.parallel,
+			groupIndex: groupIndex,
+			specIndex:  specIndex,
 		})
 		groupIndex, specIndex = 0, 0
 		defer func() {
@@ -128,18 +142,25 @@ func parse(f func(*testing.T, G, S), opts ...Option) []specInfo {
 		if cfg.before || cfg.after {
 			return
 		}
-		spec := specInfo{pend: cfg.pend, parallel: cfg.parallel || parallel, index: specIndex}
+		spec := specInfo{
+			pend:     cfg.pend,
+			focus:    cfg.focus,
+			parallel: cfg.parallel || global.parallel,
+			index:    specIndex,
+		}
 		for _, group := range groups {
 			spec.name = append(spec.name, group.text)
 			spec.groups = append(spec.groups, group.groupIndex)
 			spec.pend = spec.pend || group.pend
+			spec.focus = spec.focus || group.focus
 			spec.parallel = spec.parallel || group.parallel
 		}
 		spec.name = append(spec.name, text)
 		specs = append(specs, spec)
 		specIndex++
+		focused = focused || spec.focus && !spec.pend
 	})
-	return specs
+	return specs, focused
 }
 
 type Option func(*config)
@@ -152,6 +173,7 @@ func Parallel() Option {
 
 type config struct {
 	pend     bool
+	focus    bool
 	parallel bool
 	before   bool
 	after    bool
