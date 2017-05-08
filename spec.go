@@ -13,60 +13,67 @@ func (g G) Pend(text string, f func(), _ ...Option) {
 
 type S func(string, func(), ...Option)
 
-func (s S) Before(f func(), opts ...Option) {
-	s("", f, append(opts, func(c *config) { c.before = true })...)
+func (s S) Before(f func()) {
+	s("", f, func(c *config) { c.before = true })
 }
 
-func (s S) After(f func(), opts ...Option) {
-	s("", f, append(opts, func(c *config) { c.after = true })...)
+func (s S) After(f func()) {
+	s("", f, func(c *config) { c.after = true })
 }
 
 func (s S) Pend(text string, f func(), _ ...Option) {
 	s(text, f, func(c *config) { c.pend = true })
 }
 
-func Run(t *testing.T, f func(*testing.T, G, S)) bool {
+func Run(t *testing.T, f func(*testing.T, G, S), opts ...Option) bool {
 	success := true
-	specs := parse(f)
 
-	for i := range specs {
-		s := specs[i]
-		if ok := t.Run(strings.Join(s.name, "/"), func(t *testing.T) {
-			t.Parallel()
+	for _, s := range parse(f, opts...) {
+		s := s
+		name := strings.Join(s.name, "/")
+		success = success && t.Run(name, func(t *testing.T) {
+			switch {
+			case s.pend:
+				t.SkipNow()
+			case s.parallel:
+				t.Parallel()
+			}
 			var (
 				spec          func()
 				before, after []func()
 			)
 			f(t, func(_ string, f func(), _ ...Option) {
-				scanGroups := len(s.groups) > 0
 				switch {
-				case scanGroups && s.groups[0] == 0:
+				case len(s.groups) == 0:
+				case s.groups[0] > 0:
+					s.groups[0]--
+				default:
 					s.groups = s.groups[1:]
 					f()
-				case scanGroups:
-					s.groups[0]--
 				}
 			}, func(text string, f func(), opts ...Option) {
 				cfg := options(opts).apply()
-				scanGroup := spec == nil && len(s.groups) == 0
 				switch {
 				case cfg.before:
 					before = append(before, f)
 				case cfg.after:
 					after = append([]func(){f}, after...)
-				case scanGroup && s.index == 0:
-					spec = f
-				case scanGroup:
+				case spec != nil || len(s.groups) > 0:
+				case s.index > 0:
 					s.index--
+				default:
+					spec = f
 				}
 			})
+
+			if spec == nil {
+				t.Fatalf("Failed to parse: %s", name)
+			}
 
 			run(before...)
 			defer run(after...)
 			run(spec)
-		}); !ok {
-			success = false
-		}
+		})
 	}
 
 	return success
@@ -79,35 +86,40 @@ func run(fs ...func()) {
 }
 
 type specInfo struct {
-	name   []string
-	pend   bool
-	groups []uint64
-	index  uint64
+	name     []string
+	pend     bool
+	parallel bool
+	groups   []uint64
+	index    uint64
 }
 
-type groupInfo struct {
-	text       string
-	pend       bool
-	groupIndex uint64
-	specIndex  uint64
-}
+func parse(f func(*testing.T, G, S), opts ...Option) []specInfo {
+	type groupInfo struct {
+		text       string
+		pend       bool
+		parallel   bool
+		groupIndex uint64
+		specIndex  uint64
+	}
 
-func parse(f func(*testing.T, G, S)) []specInfo {
 	var (
-		specs          []specInfo
-		groups         []groupInfo
-		nextGroupIndex uint64 // does this really work?
-		nextSpecIndex  uint64
+		parallel   = options(opts).apply().parallel
+		specs      []specInfo
+		groups     []groupInfo
+		groupIndex uint64 // does this really work?
+		specIndex  uint64
 	)
 
 	f(nil, func(text string, f func(), opts ...Option) {
-		pend := options(opts).apply().pend
-		groups = append(groups, groupInfo{text, pend, nextGroupIndex, nextSpecIndex})
-		nextGroupIndex = 0
-		nextSpecIndex = 0
+		cfg := options(opts).apply()
+		groups = append(groups, groupInfo{
+			text, cfg.pend,cfg.parallel || parallel,
+			groupIndex, specIndex,
+		})
+		groupIndex, specIndex = 0, 0
 		defer func() {
-			nextGroupIndex = groups[len(groups)-1].groupIndex + 1
-			nextSpecIndex = groups[len(groups)-1].specIndex
+			groupIndex = groups[len(groups)-1].groupIndex + 1
+			specIndex = groups[len(groups)-1].specIndex
 			groups = groups[:len(groups)-1]
 		}()
 		f()
@@ -116,25 +128,33 @@ func parse(f func(*testing.T, G, S)) []specInfo {
 		if cfg.before || cfg.after {
 			return
 		}
-		spec := specInfo{pend: cfg.pend, index: nextSpecIndex}
+		spec := specInfo{pend: cfg.pend, parallel: cfg.parallel || parallel, index: specIndex}
 		for _, group := range groups {
 			spec.name = append(spec.name, group.text)
 			spec.groups = append(spec.groups, group.groupIndex)
 			spec.pend = spec.pend || group.pend
+			spec.parallel = spec.parallel || group.parallel
 		}
 		spec.name = append(spec.name, text)
 		specs = append(specs, spec)
-		nextSpecIndex++
+		specIndex++
 	})
 	return specs
 }
 
 type Option func(*config)
 
+func Parallel() Option {
+	return func(c *config) {
+		c.parallel = true
+	}
+}
+
 type config struct {
-	pend   bool
-	before bool
-	after  bool
+	pend     bool
+	parallel bool
+	before   bool
+	after    bool
 }
 
 type options []Option
