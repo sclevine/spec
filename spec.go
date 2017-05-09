@@ -104,35 +104,24 @@ type specInfo struct {
 }
 
 func parse(f func(*testing.T, G, S), opts ...Option) (specs []specInfo, focused bool) {
-	var (
-		global     = options(opts).apply()
-		groups     groupStack
-		groupIndex uint64
-		specIndex  uint64
-	)
+	var groups groupStack
+	global := options(opts).apply()
 
 	f(nil, func(text string, f func(), opts ...Option) {
 		cfg := options(opts).apply()
-
-		groups = groups.push(cfg, text, groupIndex, specIndex)
-		defer func() { groups, groupIndex, specIndex = groups.pop() }()
-
-		groupIndex, specIndex = 0, 0
+		groups.push(cfg, text)
+		defer groups.pop()
 		focused = focused || groups.focused()
-
 		f()
 	}, func(text string, _ func(), opts ...Option) {
 		cfg := options(opts).apply()
-		if cfg.before || cfg.after {
+		cfg.parallel = cfg.parallel || global.parallel
+		spec, ok := groups.spec(cfg, text)
+		if !ok {
 			return
 		}
-		spec := groups.spec(cfg, text, specIndex)
-
-		spec.parallel = spec.parallel || global.parallel
 		focused = focused || spec.focus && !spec.pend
-
 		specs = append(specs, spec)
-		specIndex++
 	})
 	return specs, focused
 }
@@ -146,51 +135,62 @@ type groupInfo struct {
 	specIndex  uint64
 }
 
-type groupStack []groupInfo
+type groupStack struct {
+	groups     []groupInfo
+	groupIndex uint64
+	specIndex  uint64
+}
 
-func (g groupStack) push(cfg *config, text string, groupIndex, specIndex uint64) groupStack {
-	group := g.last()
-	return append(g, groupInfo{
+func (g *groupStack) push(cfg *config, text string) {
+	last := g.last()
+	g.groups = append(g.groups, groupInfo{
 		text:       text,
-		pend:       group.pend || cfg.pend,
-		focus:      group.focus || cfg.focus,
-		parallel:   group.parallel || cfg.parallel,
-		groupIndex: groupIndex,
-		specIndex:  specIndex,
+		pend:       last.pend || cfg.pend,
+		focus:      last.focus || cfg.focus,
+		parallel:   last.parallel || cfg.parallel,
+		groupIndex: g.groupIndex,
+		specIndex:  g.specIndex,
 	})
+	g.groupIndex, g.specIndex = 0, 0
 }
 
-func (g groupStack) pop() (stack groupStack, groupIndex, specIndex uint64) {
-	group := g.last()
-	return g[:len(g)-1], group.groupIndex + 1, group.specIndex
+func (g *groupStack) pop() {
+	l := len(g.groups) - 1
+	g.groupIndex = g.groups[l].groupIndex + 1
+	g.specIndex = g.groups[l].specIndex
+	g.groups = g.groups[:l]
 }
 
-func (g groupStack) last() groupInfo {
-	if len(g) == 0 {
+func (g *groupStack) last() groupInfo {
+	if len(g.groups) == 0 {
 		return groupInfo{}
 	}
-	return g[len(g)-1]
+	return g.groups[len(g.groups)-1]
 }
 
-func (g groupStack) focused() bool {
-	group := g.last()
-	return group.focus && !group.pend
+func (g *groupStack) focused() bool {
+	last := g.last()
+	return last.focus && !last.pend
 }
 
-func (g groupStack) spec(cfg *config, text string, specIndex uint64) specInfo {
-	group := g.last()
-	spec := specInfo{
-		pend:     cfg.pend || group.pend,
-		focus:    cfg.focus || group.focus,
-		parallel: cfg.parallel || group.parallel,
-		index:    specIndex,
+func (g *groupStack) spec(cfg *config, text string) (specInfo, bool) {
+	if cfg.before || cfg.after {
+		return specInfo{}, false
 	}
-	for _, group := range g {
+	last := g.last()
+	spec := specInfo{
+		pend:     cfg.pend || last.pend,
+		focus:    cfg.focus || last.focus,
+		parallel: cfg.parallel || last.parallel,
+		index:    g.specIndex,
+	}
+	for _, group := range g.groups {
 		spec.name = append(spec.name, group.text)
 		spec.groups = append(spec.groups, group.groupIndex)
 	}
 	spec.name = append(spec.name, text)
-	return spec
+	g.specIndex++
+	return spec, true
 }
 
 type Option func(*config)
