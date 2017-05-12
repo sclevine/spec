@@ -35,7 +35,12 @@ func (s S) Focus(text string, f func(), opts ...Option) {
 
 func Run(t *testing.T, f func(*testing.T, G, S), opts ...Option) bool {
 	success := true
-	specs, focused := parse(f, opts...)
+	specs, focused, seed := parse(f, opts...)
+
+	t.Logf("Running %d specs.", len(specs))
+	if seed != 0 {
+		t.Logf("Random seed: %d", seed)
+	}
 
 	for _, s := range specs {
 		s := s
@@ -60,7 +65,7 @@ func Run(t *testing.T, f func(*testing.T, G, S), opts ...Option) bool {
 					s.groups = s.groups[1:]
 					f()
 				}
-			}, func(text string, f func(), opts ...Option) {
+			}, func(_ string, f func(), opts ...Option) {
 				cfg := options(opts).apply()
 				switch {
 				case cfg.before:
@@ -92,129 +97,4 @@ func run(fs ...func()) {
 	for _, f := range fs {
 		f()
 	}
-}
-
-type specInfo struct {
-	name     []string
-	pend     bool
-	focus    bool
-	parallel bool
-	groups   []uint64
-	index    uint64
-}
-
-func parse(f func(*testing.T, G, S), opts ...Option) (specs []specInfo, focused bool) {
-	var groups groupStack
-	global := options(opts).apply()
-
-	f(nil, func(text string, f func(), opts ...Option) {
-		cfg := options(opts).apply()
-		groups.push(cfg, text)
-		defer groups.pop()
-		focused = focused || groups.focused()
-		f()
-	}, func(text string, _ func(), opts ...Option) {
-		cfg := options(opts).apply()
-		cfg.parallel = cfg.parallel || global.parallel
-		spec, ok := groups.spec(cfg, text)
-		if !ok {
-			return
-		}
-		focused = focused || spec.focus && !spec.pend
-		specs = append(specs, spec)
-	})
-	return specs, focused
-}
-
-type groupInfo struct {
-	text       string
-	pend       bool
-	focus      bool
-	parallel   bool
-	groupIndex uint64
-	specIndex  uint64
-}
-
-type groupStack struct {
-	groups     []groupInfo
-	groupIndex uint64
-	specIndex  uint64
-}
-
-func (g *groupStack) push(cfg *config, text string) {
-	last := g.last()
-	g.groups = append(g.groups, groupInfo{
-		text:       text,
-		pend:       last.pend || cfg.pend,
-		focus:      last.focus || cfg.focus,
-		parallel:   last.parallel || cfg.parallel,
-		groupIndex: g.groupIndex,
-		specIndex:  g.specIndex,
-	})
-	g.groupIndex, g.specIndex = 0, 0
-}
-
-func (g *groupStack) pop() {
-	l := len(g.groups) - 1
-	g.groupIndex = g.groups[l].groupIndex + 1
-	g.specIndex = g.groups[l].specIndex
-	g.groups = g.groups[:l]
-}
-
-func (g *groupStack) last() groupInfo {
-	if len(g.groups) == 0 {
-		return groupInfo{}
-	}
-	return g.groups[len(g.groups)-1]
-}
-
-func (g *groupStack) focused() bool {
-	last := g.last()
-	return last.focus && !last.pend
-}
-
-func (g *groupStack) spec(cfg *config, text string) (specInfo, bool) {
-	if cfg.before || cfg.after {
-		return specInfo{}, false
-	}
-	last := g.last()
-	spec := specInfo{
-		pend:     cfg.pend || last.pend,
-		focus:    cfg.focus || last.focus,
-		parallel: cfg.parallel || last.parallel,
-		index:    g.specIndex,
-	}
-	for _, group := range g.groups {
-		spec.name = append(spec.name, group.text)
-		spec.groups = append(spec.groups, group.groupIndex)
-	}
-	spec.name = append(spec.name, text)
-	g.specIndex++
-	return spec, true
-}
-
-type Option func(*config)
-
-func Parallel() Option {
-	return func(c *config) {
-		c.parallel = true
-	}
-}
-
-type config struct {
-	pend     bool
-	focus    bool
-	parallel bool
-	before   bool
-	after    bool
-}
-
-type options []Option
-
-func (o options) apply() *config {
-	cfg := &config{}
-	for _, opt := range o {
-		opt(cfg)
-	}
-	return cfg
 }
