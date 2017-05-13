@@ -25,15 +25,21 @@ func Random() Option {
 	}
 }
 
+func Reverse() Option {
+	return func(c *config) {
+		c.order = orderReverse
+	}
+}
+
 func Seed(s int64) Option {
 	return func(c *config) {
 		c.seed = s
 	}
 }
 
-func Reverse() Option {
+func Flatten() Option {
 	return func(c *config) {
-		c.order = orderReverse
+
 	}
 }
 

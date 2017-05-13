@@ -2,7 +2,7 @@ package spec
 
 import "testing"
 
-func parse(f func(*testing.T, G, S), opts ...Option) (specs []specInfo, focused bool, seed int64) {
+func oldParse(f func(*testing.T, G, S), opts ...Option) (specs []specInfo, focused bool, seed int64) {
 	var groups groupStack
 	cfg := options(opts).apply()
 	seed = cfg.seed

@@ -34,63 +34,58 @@ func (s S) Focus(text string, f func(), opts ...Option) {
 }
 
 func Run(t *testing.T, f func(*testing.T, G, S), opts ...Option) bool {
-	success := true
-	specs, focused, seed := parse(f, opts...)
+	specs, focused, seed := oldParse(f, opts...)
 
 	t.Logf("Running %d specs.", len(specs))
 	if seed != 0 {
 		t.Logf("Random seed: %d", seed)
 	}
 
-	for _, s := range specs {
-		s := s
-		name := strings.Join(s.name, "/")
-		success = success && t.Run(name, func(t *testing.T) {
+	nodes := parse(f, opts...)
+
+	return nodes.run(t, nil, func(t *testing.T, groups []int, n node) {
+		switch {
+		case n.pend, focused && !n.focus:
+			t.SkipNow()
+		case n.order == orderParallel:
+			t.Parallel()
+		}
+		var (
+			spec          func()
+			before, after []func()
+		)
+		f(t, func(_ string, f func(), _ ...Option) {
 			switch {
-			case s.pend, focused && !s.focus:
-				t.SkipNow()
-			case s.parallel:
-				t.Parallel()
+			case len(groups) == 0:
+			case groups[0] > 0:
+				groups[0]--
+			default:
+				groups = groups[1:]
+				f()
 			}
-			var (
-				spec          func()
-				before, after []func()
-			)
-			f(t, func(_ string, f func(), _ ...Option) {
-				switch {
-				case len(s.groups) == 0:
-				case s.groups[0] > 0:
-					s.groups[0]--
-				default:
-					s.groups = s.groups[1:]
-					f()
-				}
-			}, func(_ string, f func(), opts ...Option) {
-				cfg := options(opts).apply()
-				switch {
-				case cfg.before:
-					before = append(before, f)
-				case cfg.after:
-					after = append([]func(){f}, after...)
-				case spec != nil || len(s.groups) > 0:
-				case s.index > 0:
-					s.index--
-				default:
-					spec = f
-				}
-			})
-
-			if spec == nil {
-				t.Fatalf("Failed to parse: %s", name)
+		}, func(_ string, f func(), opts ...Option) {
+			cfg := options(opts).apply()
+			switch {
+			case cfg.before:
+				before = append(before, f)
+			case cfg.after:
+				after = append([]func(){f}, after...)
+			case spec != nil || len(groups) > 0:
+			case n.index > 0:
+				n.index--
+			default:
+				spec = f
 			}
-
-			run(before...)
-			defer run(after...)
-			run(spec)
 		})
-	}
 
-	return success
+		if spec == nil {
+			t.Fatal("Failed to parse.")
+		}
+
+		run(before...)
+		defer run(after...)
+		run(spec)
+	})
 }
 
 func run(fs ...func()) {
