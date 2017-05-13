@@ -3,39 +3,41 @@ package spec
 import "testing"
 
 func parse(f func(*testing.T, G, S), opts ...Option) tree {
-	var nodes *tree
 	cfg := options(opts).apply()
+	last := &node{
+		order: cfg.order.from(orderSequential),
+		pend: cfg.pend,
+		focus: cfg.focus,
+	}
 
 	f(nil, func(text string, f func(), opts ...Option) {
 		cfg := options(opts).apply()
-		groupNode := node{
+		last.nodes = append(last.nodes, node{
 			text:  text,
 			order: cfg.order,
 			pend:  cfg.pend,
 			focus: cfg.focus,
-			index: len(*nodes),
+			index: len(last.nodes),
 			nodes: tree{},
-		}
-		*nodes = append(*nodes, groupNode)
-		prevNodes := nodes
-		nodes = &groupNode.nodes
-		defer func() { nodes = prevNodes }()
+		})
+		prevLast := last
+		last = &last.nodes[len(last.nodes)-1]
+		defer func() { last = prevLast }()
 		f()
 	}, func(text string, _ func(), opts ...Option) {
 		cfg := options(opts).apply()
 		if cfg.before || cfg.after {
 			return
 		}
-		specNode := node{
+		last.nodes = append(last.nodes, node{
 			text:  text,
 			order: cfg.order,
 			pend:  cfg.pend,
 			focus: cfg.focus,
-			index: len(*nodes),
-		}
-		*nodes = append(*nodes, specNode)
+			index: len(last.nodes),
+		})
 	})
-	return *nodes
+	return last.nodes
 }
 
 type node struct {
