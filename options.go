@@ -37,9 +37,9 @@ func Seed(s int64) Option {
 	}
 }
 
-func Flatten() Option {
+func Nest() Option {
 	return func(c *config) {
-
+		c.nest = true
 	}
 }
 
@@ -85,6 +85,7 @@ func (o order) sort(specs []specInfo, seed *int64) {
 type config struct {
 	order  order
 	seed   int64
+	nest   bool
 	pend   bool
 	focus  bool
 	before bool

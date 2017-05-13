@@ -1,9 +1,6 @@
 package spec
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
 type G func(string, func(), ...Option)
 
@@ -34,18 +31,21 @@ func (s S) Focus(text string, f func(), opts ...Option) {
 }
 
 func Run(t *testing.T, f func(*testing.T, G, S), opts ...Option) bool {
-	specs, focused, seed := oldParse(f, opts...)
+	cfg := options(opts).apply()
 
-	t.Logf("Running %d specs.", len(specs))
-	if seed != 0 {
-		t.Logf("Random seed: %d", seed)
+	nodes, sum := parse(f, cfg)
+	t.Logf("Total: %d Focused: %d Pending: %d.", sum.total, sum.focused, sum.pending)
+	if sum.focus {
+		t.Log("Focus is active.")
+	}
+	if cfg.seed != 0 {
+		t.Logf("Random seed: %d", cfg.seed)
 	}
 
-	nodes := parse(f, opts...)
-
+	// FIXME: specs sharing same group
 	return nodes.run(t, nil, func(t *testing.T, groups []int, n node) {
 		switch {
-		case n.pend, focused && !n.focus:
+		case n.pend, sum.focus && !n.focus:
 			t.SkipNow()
 		case n.order == orderParallel:
 			t.Parallel()
@@ -57,6 +57,7 @@ func Run(t *testing.T, f func(*testing.T, G, S), opts ...Option) bool {
 		f(t, func(_ string, f func(), _ ...Option) {
 			switch {
 			case len(groups) == 0:
+				n.index--
 			case groups[0] > 0:
 				groups[0]--
 			default:
@@ -70,7 +71,9 @@ func Run(t *testing.T, f func(*testing.T, G, S), opts ...Option) bool {
 				before = append(before, f)
 			case cfg.after:
 				after = append([]func(){f}, after...)
-			case spec != nil || len(groups) > 0:
+			case spec != nil:
+			case len(groups) > 0:
+				groups[0]--
 			case n.index > 0:
 				n.index--
 			default:
