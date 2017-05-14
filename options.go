@@ -31,7 +31,7 @@ func Random() Option {
 	}
 }
 
-// Reverse indicates that groups of specs should be run in reverse order.
+// Reverse indicates that a group of specs should be run in reverse order.
 // Valid Option for: Run, G
 func Reverse() Option {
 	return func(c *config) {
@@ -39,8 +39,8 @@ func Reverse() Option {
 	}
 }
 
-// Nest runs each group of specs in a shared subtest.
-// This can allows for more control over parallelism.
+// Nest runs each group of spec subtests in a parent subtest.
+// This allows for more control over parallelism.
 // Valid Option for: Run, G
 func Nest() Option {
 	return func(c *config) {
@@ -48,7 +48,7 @@ func Nest() Option {
 	}
 }
 
-// Seed specifies the random seed used for all randomized specs.
+// Seed specifies the random seed to be used for randomized specs in a Run block.
 // The random seed is always displayed before specs are run.
 // If not specified, the current time is used.
 // Valid Option for: Run
