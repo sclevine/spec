@@ -69,7 +69,7 @@ func TestSpec(t *testing.T) {
 				})
 			}, spec.Random())
 
-			when("some things happen in reverse", func() {
+			when("some things happen in reverse and in nested subtests", func() {
 				it.Before(func() {
 					t.Log("before reverse")
 				})
@@ -81,7 +81,7 @@ func TestSpec(t *testing.T) {
 				it("should do one thing first", func() {
 					t.Log("first reverse")
 				})
-			}, spec.Reverse())
+			}, spec.Reverse(), spec.Nest())
 
 			it("should do something else", func() {
 				t.Log("third")
@@ -97,5 +97,5 @@ func TestSpec(t *testing.T) {
 				})
 			})
 		})
-	})
+	}, spec.Seed(1494742251))
 }

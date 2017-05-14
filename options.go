@@ -1,45 +1,60 @@
 package spec
 
-import (
-	"math/rand"
-	"time"
-)
+import "time"
 
+// An Option is used to control the behavior of a call to Run, G, or S.
 type Option func(*config)
 
+// Parallel indicates that a spec or group of specs should be run in parallel.
+// This Option is equivalent to t.Parallel().
+// Valid Option for: Run, G, S
 func Parallel() Option {
 	return func(c *config) {
 		c.order = orderParallel
 	}
 }
 
+// Sequential indicates that a group of specs should be run in order.
+// Valid Option for: Run, G
 func Sequential() Option {
 	return func(c *config) {
 		c.order = orderSequential
 	}
 }
 
+// Random indicates that a group of specs should be run in random order.
+// Randomization is per group, such that all groupings are maintained.
+// Valid Option for: Run, G
 func Random() Option {
 	return func(c *config) {
 		c.order = orderRandom
 	}
 }
 
+// Reverse indicates that groups of specs should be run in reverse order.
+// Valid Option for: Run, G
 func Reverse() Option {
 	return func(c *config) {
 		c.order = orderReverse
 	}
 }
 
-func Seed(s int64) Option {
-	return func(c *config) {
-		c.seed = s
-	}
-}
-
+// Nest runs each group of specs in a shared subtest.
+// This can allows for more control over parallelism.
+// Valid Option for: Run, G
 func Nest() Option {
 	return func(c *config) {
 		c.nest = true
+	}
+}
+
+// Seed specifies the random seed used for all randomized specs.
+// The random seed is always displayed before specs are run.
+// If not specified, the current time is used.
+// Valid Option for: Run
+func Seed(s int64) Option {
+	return func(c *config) {
+		c.seed = s
 	}
 }
 
@@ -47,8 +62,8 @@ type order int
 
 const (
 	orderInherit order = iota
-	orderParallel
 	orderSequential
+	orderParallel
 	orderRandom
 	orderReverse
 )
@@ -62,29 +77,9 @@ func (o order) from(last order) order {
 	}
 }
 
-func (o order) sort(specs []specInfo, seed *int64) {
-	switch o {
-	case orderRandom:
-		if *seed == 0 {
-			*seed = time.Now().Unix()
-		}
-
-		r := rand.New(rand.NewSource(*seed))
-		for i := len(specs) - 1; i > 0; i-- {
-			j := r.Intn(i + 1)
-			specs[i], specs[j] = specs[j], specs[i]
-		}
-	case orderReverse:
-		last := len(specs) - 1
-		for i := 0; i < len(specs)/2; i++ {
-			specs[i], specs[last-i] = specs[last-i], specs[i]
-		}
-	}
-}
-
 type config struct {
-	order  order
 	seed   int64
+	order  order
 	nest   bool
 	pend   bool
 	focus  bool
@@ -98,6 +93,9 @@ func (o options) apply() *config {
 	cfg := &config{}
 	for _, opt := range o {
 		opt(cfg)
+	}
+	if cfg.seed == 0 {
+		cfg.seed = time.Now().Unix()
 	}
 	return cfg
 }

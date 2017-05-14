@@ -32,18 +32,22 @@ func (s S) Focus(text string, f func(), opts ...Option) {
 
 func Run(t *testing.T, f func(*testing.T, G, S), opts ...Option) bool {
 	cfg := options(opts).apply()
-
-	nodes, sum := parse(f, cfg)
+	n := &node{
+		seed:  cfg.seed,
+		order: cfg.order.from(orderSequential),
+		pend:  cfg.pend,
+		focus: cfg.focus,
+	}
+	sum := n.parse(f)
 	t.Logf("Total: %d Focused: %d Pending: %d.", sum.total, sum.focused, sum.pending)
+	if sum.random {
+		t.Logf("Random seed: %d", cfg.seed)
+	}
 	if sum.focus {
 		t.Log("Focus is active.")
 	}
-	if cfg.seed != 0 {
-		t.Logf("Random seed: %d", cfg.seed)
-	}
 
-	// FIXME: specs sharing same group
-	return nodes.run(t, nil, func(t *testing.T, groups []int, n node) {
+	return n.nodes.run(t, func(t *testing.T, n node) {
 		switch {
 		case n.pend, sum.focus && !n.focus:
 			t.SkipNow()
@@ -56,12 +60,10 @@ func Run(t *testing.T, f func(*testing.T, G, S), opts ...Option) bool {
 		)
 		f(t, func(_ string, f func(), _ ...Option) {
 			switch {
-			case len(groups) == 0:
-				n.index--
-			case groups[0] > 0:
-				groups[0]--
+			case len(n.loc) < 2, n.loc[0] > 0:
+				n.loc[0]--
 			default:
-				groups = groups[1:]
+				n.loc = n.loc[1:]
 				f()
 			}
 		}, func(_ string, f func(), opts ...Option) {
@@ -72,17 +74,15 @@ func Run(t *testing.T, f func(*testing.T, G, S), opts ...Option) bool {
 			case cfg.after:
 				after = append([]func(){f}, after...)
 			case spec != nil:
-			case len(groups) > 0:
-				groups[0]--
-			case n.index > 0:
-				n.index--
+			case len(n.loc) > 1, n.loc[0] > 0:
+				n.loc[0]--
 			default:
 				spec = f
 			}
 		})
 
 		if spec == nil {
-			t.Fatal("Failed to parse.")
+			t.Fatal("Failed to locate spec.")
 		}
 
 		run(before...)

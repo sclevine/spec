@@ -1,6 +1,6 @@
 # spec
 
-Spec is a fully-featured BDD test organizer for Go. Spec is a minimal, additive
+Spec is a simple and robust BDD test organizer for Go. Spec is a minimal, additive
 extension of the standard library `testing` package. Spec can be considered a
 lightweight wrapper for Go 1.7+ [subtests](https://blog.golang.org/subtests).
 
