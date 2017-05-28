@@ -5,16 +5,6 @@ import "time"
 // An Option is used to control the behavior of a call to Run, G, or S.
 type Option func(*config)
 
-// Nest runs each group of spec subtests in a parent subtest.
-// This allows for more control over parallelism.
-//
-// Valid Option for: Run, G
-func Nest() Option {
-	return func(c *config) {
-		c.nest = true
-	}
-}
-
 // Seed specifies the random seed used for any randomized specs in a Run block.
 // The random seed is always displayed before specs are run.
 // If not specified, the current time is used.
@@ -76,7 +66,7 @@ func Local() Option {
 	return func(c *config) {
 		c.scope = scopeLocal
 	}
-};
+}
 
 // Global indicates that test order applies globally to all descendant specs.
 // For example, a group with Random() and Global() will run all descendant
@@ -90,6 +80,26 @@ func Global() Option {
 	}
 }
 
+// Nested runs each group of specs in a parent subtest.
+// This allows for more control over parallelism.
+//
+// Valid Option for: Run, G
+func Nested() Option {
+	return func(c *config) {
+		c.nest = nestOn
+	}
+}
+
+// Flat runs each spec .
+// This is the default behavior.
+//
+// Valid Option for: Run, G
+func Flat() Option {
+	return func(c *config) {
+		c.nest = nestOff
+	}
+}
+
 type order int
 
 const (
@@ -100,13 +110,8 @@ const (
 	orderReverse
 )
 
-func (o order) from(last order) order {
-	switch o {
-	case orderInherit:
-		return last
-	default:
-		return o
-	}
+func (o order) or(last order) order {
+	return order(inheritZero(int(o), int(last)))
 }
 
 type scope int
@@ -117,12 +122,28 @@ const (
 	scopeGlobal
 )
 
-func (s scope) from(last scope) scope {
-	switch s {
-	case scopeInherit:
+func (s scope) or(last scope) scope {
+	return scope(inheritZero(int(s), int(last)))
+}
+
+type nest int
+
+const (
+	nestInherit nest = iota
+	nestOff
+	nestOn
+)
+
+func (n nest) or(last nest) nest {
+	return nest(inheritZero(int(n), int(last)))
+}
+
+func inheritZero(next, last int) int {
+	switch next {
+	case 0:
 		return last
 	default:
-		return s
+		return next
 	}
 }
 
@@ -130,7 +151,7 @@ type config struct {
 	seed   int64
 	order  order
 	scope  scope
-	nest   bool
+	nest   nest
 	pend   bool
 	focus  bool
 	before bool

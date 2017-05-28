@@ -2,23 +2,26 @@ package spec
 
 import "testing"
 
-// G is a grouping of specs.
+// G is a group of specs.
 // Unlike other testing libraries, it is re-evaluated for each spec.
 //
 // Valid Options:
-// Parallel(), Sequential(), Random(), Reverse(), Nest(), Local(), Global()
+// Sequential(), Random(), Reverse(), Parallel()
+// Local(), Global(), Flat(), Nested()
 type G func(text string, f func(), opts ...Option)
 
-// Pend skips all specs in a grouping of specs.
+// Pend skips all specs in the group.
+//
 // All Options are ignored.
 func (g G) Pend(text string, f func(), _ ...Option) {
 	g(text, f, func(c *config) { c.pend = true })
 }
 
-// Focus skips all specs except the focused grouping and other focused specs.
+// Focus skips all specs except the focused group and other focused specs.
 //
 // Valid Options:
-// Parallel(), Sequential(), Random(), Reverse(), Nest(), Local(), Global()
+// Sequential(), Random(), Reverse(), Parallel()
+// Local(), Global(), Flat(), Nested()
 func (g G) Focus(text string, f func(), opts ...Option) {
 	g(text, f, append(opts, func(c *config) { c.focus = true })...)
 }
@@ -39,6 +42,7 @@ func (s S) After(f func()) {
 }
 
 // Pend skips the spec.
+//
 // All Options are ignored.
 func (s S) Pend(text string, f func(), _ ...Option) {
 	s(text, f, func(c *config) { c.pend = true })
@@ -51,19 +55,20 @@ func (s S) Focus(text string, f func(), opts ...Option) {
 	s(text, f, append(opts, func(c *config) { c.focus = true })...)
 }
 
-// Run is a top-level grouping of specs.
+// Run is a top-level group of specs.
 // Unlike other testing libraries, it is re-evaluated for each spec.
 //
 // Valid Options:
-// Parallel(), Sequential(), Random(), Reverse(), Nest(), Local(), Global()
+// Sequential(), Random(), Reverse(), Parallel()
+// Local(), Global(), Flat(), Nested()
 func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bool {
 	cfg := options(opts).apply()
 	n := &node{
 		name:  []string{text},
 		seed:  cfg.seed,
-		order: cfg.order.from(orderSequential),
-		scope: cfg.scope.from(scopeLocal),
-		nest:  cfg.nest,
+		order: cfg.order.or(orderSequential),
+		scope: cfg.scope.or(scopeLocal),
+		nest:  cfg.nest.or(nestOff),
 		pend:  cfg.pend,
 		focus: cfg.focus,
 	}

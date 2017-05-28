@@ -32,6 +32,8 @@ organization.
 ### Todo
 
 - Test coverage
+- it.JustBefore/it.JustAfter
+- Reporters
 
 ### Examples
 

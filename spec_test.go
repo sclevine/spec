@@ -81,7 +81,7 @@ func TestSpec(t *testing.T) {
 				it("should do one thing first", func() {
 					t.Log("first reverse")
 				})
-			}, spec.Reverse(), spec.Nest())
+			}, spec.Reverse(), spec.Nested())
 
 			when("some things happen in globally random order", func() {
 				it.Before(func() {

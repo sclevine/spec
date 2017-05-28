@@ -20,7 +20,7 @@ type node struct {
 	seed  int64
 	order order
 	scope scope
-	nest  bool
+	nest  nest
 	pend  bool
 	focus bool
 	nodes tree
@@ -64,7 +64,7 @@ func (n *node) add(text string, cfg *config, nodes tree) (pend, focus bool) {
 	// TODO: cfg validation logic here
 
 	name := n.name
-	if n.nest {
+	if n.nest == nestOn {
 		name = nil
 	}
 	pend = cfg.pend || n.pend
@@ -73,9 +73,9 @@ func (n *node) add(text string, cfg *config, nodes tree) (pend, focus bool) {
 		name:  append(append([]string(nil), name...), text),
 		loc:   append(append([]int(nil), n.loc...), len(n.nodes)),
 		seed:  n.seed,
-		order: cfg.order.from(n.order),
-		scope: cfg.scope.from(n.scope),
-		nest:  cfg.nest || n.nest,
+		order: cfg.order.or(n.order),
+		scope: cfg.scope.or(n.scope),
+		nest:  cfg.nest.or(n.nest),
 		pend:  pend,
 		focus: focus,
 		nodes: nodes,
@@ -125,7 +125,7 @@ func (n node) run(t *testing.T, f func(*testing.T, node)) bool {
 	switch {
 	case n.nodes == nil:
 		return t.Run(name, func(t *testing.T) { f(t, n) })
-	case n.nest:
+	case n.nest == nestOn:
 		return t.Run(name, func(t *testing.T) { n.nodes.run(t, f) })
 	default:
 		return n.nodes.run(t, f)
