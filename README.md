@@ -3,7 +3,7 @@
 [![GoDoc](https://godoc.org/github.com/sclevine/spec?status.svg)](https://godoc.org/github.com/sclevine/spec)
 
 Spec is a simple BDD test organizer for Go. It minimally extends the standard
-library `testing` package by facilitating the easy organization of Go 1.7+
+library `testing` package by facilitating easy organization of Go 1.7+
 [subtests](https://blog.golang.org/subtests).
 
 Spec differs from other BDD libraries for Go in that it:
@@ -13,13 +13,17 @@ Spec differs from other BDD libraries for Go in that it:
 - Does not reuse any closures between test runs (to avoid test pollution)
 - Does not use global state, interface types, or reflection
 
+Spec is intended for gophers who want to write BDD tests in idiomatic Go using
+the standard library `testing` package. Spec aims to do "one thing right,"
+and does not provide a wide DSL or any functionality outside of test
+organization.
+
 ### Features
 
 - Clean, simple, straightforward syntax
 - Supports focusing and pending tests
 - Supports sequential, random, reverse, and parallel test order
 - Provides granular control over test order and subtest nesting
-
 
 ### Notes
 
@@ -36,8 +40,8 @@ Spec differs from other BDD libraries for Go in that it:
 Quick example:
 
 ```go
-func TestSpec(t *testing.T) {
-    spec.Run(t, func(t *testing.T, when spec.G, it spec.S) {
+func TestObject(t *testing.T) {
+    spec.Run(t, "object", func(t *testing.T, when spec.G, it spec.S) {
         var (
             someObject *myapp.Object
             someMock   *mocks.Mock
@@ -101,7 +105,7 @@ func TestObject(t *testing.T) {
     spec.Run(t, testObject)
 }
 
-func testObject(t *testing.T, when spec.G, it spec.S) {
+func testObject(t *testing.T, "object", when spec.G, it spec.S) {
     var someObject myapp.Object
     ...
 }

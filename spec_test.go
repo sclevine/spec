@@ -7,7 +7,7 @@ import (
 )
 
 func TestSpec(t *testing.T) {
-	spec.Run(t, func(t *testing.T, when spec.G, it spec.S) {
+	spec.Run(t, "spec", func(t *testing.T, when spec.G, it spec.S) {
 		when("something happens", func() {
 			var someStr string
 
@@ -83,6 +83,44 @@ func TestSpec(t *testing.T) {
 				})
 			}, spec.Reverse(), spec.Nest())
 
+			when("some things happen in globally random order", func() {
+				it.Before(func() {
+					t.Log("before global")
+				})
+
+				when("grouped first", func() {
+					it.Before(func() {
+						t.Log("before group one global")
+					})
+
+					it("should do one thing in group one randomly", func() {
+						t.Log("group one, spec one, global random")
+					})
+
+					it("should do another thing in group one randomly", func() {
+						t.Log("group one, spec two, global random")
+					})
+				})
+
+				when("grouped second", func() {
+					it.Before(func() {
+						t.Log("before group two global")
+					})
+
+					it("should do one thing in group two randomly", func() {
+						t.Log("group two, spec one, global random")
+					})
+
+					it("should do another thing in group two randomly", func() {
+						t.Log("group two, spec two, global random")
+					})
+				}, spec.Local())
+
+				it("should do one thing ungrouped", func() {
+					t.Log("ungrouped global random")
+				})
+			}, spec.Random(), spec.Global())
+
 			it("should do something else", func() {
 				t.Log("third")
 			})
@@ -97,5 +135,5 @@ func TestSpec(t *testing.T) {
 				})
 			})
 		})
-	}, spec.Seed(1494742251))
+	})
 }

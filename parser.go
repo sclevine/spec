@@ -15,10 +15,11 @@ type summary struct {
 }
 
 type node struct {
-	text  []string
+	name  []string
 	loc   []int
 	seed  int64
 	order order
+	scope scope
 	nest  bool
 	pend  bool
 	focus bool
@@ -27,7 +28,6 @@ type node struct {
 
 func (n *node) parse(f func(*testing.T, G, S)) summary {
 	var sum summary
-
 	f(nil, func(text string, f func(), opts ...Option) {
 		cfg := options(opts).apply()
 		if pend, focus := n.add(text, cfg, tree{}); focus && !pend {
@@ -39,6 +39,7 @@ func (n *node) parse(f func(*testing.T, G, S)) summary {
 			if n.order == orderRandom {
 				sum.random = true
 			}
+			n.flatten()
 			n.sort()
 			n = parent
 		}()
@@ -60,13 +61,20 @@ func (n *node) parse(f func(*testing.T, G, S)) summary {
 }
 
 func (n *node) add(text string, cfg *config, nodes tree) (pend, focus bool) {
+	// TODO: cfg validation logic here
+
+	name := n.name
+	if n.nest {
+		name = nil
+	}
 	pend = cfg.pend || n.pend
 	focus = cfg.focus || n.focus
 	n.nodes = append(n.nodes, node{
-		text:  append(append([]string(nil), n.text...), text),
+		name:  append(append([]string(nil), name...), text),
 		loc:   append(append([]int(nil), n.loc...), len(n.nodes)),
 		seed:  n.seed,
 		order: cfg.order.from(n.order),
+		scope: cfg.scope.from(n.scope),
 		nest:  cfg.nest || n.nest,
 		pend:  pend,
 		focus: focus,
@@ -92,23 +100,33 @@ func (n *node) sort() {
 	}
 }
 
+func (n *node) flatten() {
+	nodes := n.nodes
+	switch n.scope {
+	case scopeGlobal:
+		var flat tree
+		for _, child := range nodes {
+			if child.nodes == nil || child.scope == scopeLocal {
+				flat = append(flat, child)
+			} else {
+				flat = append(flat, child.nodes...)
+			}
+		}
+		n.nodes = flat
+	}
+}
+
 func (n *node) last() *node {
 	return &n.nodes[len(n.nodes)-1]
 }
 
-func (n *node) name(full bool) string {
-	if !full {
-		return n.text[len(n.text)-1]
-	}
-	return strings.Join(n.text, "/")
-}
-
 func (n node) run(t *testing.T, f func(*testing.T, node)) bool {
+	name := strings.Join(n.name, "/")
 	switch {
 	case n.nodes == nil:
-		return t.Run(n.name(!n.nest), func(t *testing.T) { f(t, n) })
+		return t.Run(name, func(t *testing.T) { f(t, n) })
 	case n.nest:
-		return t.Run(n.name(false), func(t *testing.T) { n.nodes.run(t, f) })
+		return t.Run(name, func(t *testing.T) { n.nodes.run(t, f) })
 	default:
 		return n.nodes.run(t, f)
 	}
@@ -116,8 +134,8 @@ func (n node) run(t *testing.T, f func(*testing.T, node)) bool {
 
 type tree []node
 
-func (ns tree) run(t *testing.T, f func(*testing.T, node)) (ok bool) {
-	ok = true
+func (ns tree) run(t *testing.T, f func(*testing.T, node)) bool {
+	ok := true
 	for _, n := range ns {
 		ok = n.run(t, f) && ok
 	}

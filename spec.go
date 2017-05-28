@@ -4,7 +4,9 @@ import "testing"
 
 // G is a grouping of specs.
 // Unlike other testing libraries, it is re-evaluated for each spec.
-// Valid Options: Parallel(), Sequential(), Random(), Reverse(), Nest()
+//
+// Valid Options:
+// Parallel(), Sequential(), Random(), Reverse(), Nest(), Local(), Global()
 type G func(text string, f func(), opts ...Option)
 
 // Pend skips all specs in a grouping of specs.
@@ -14,12 +16,15 @@ func (g G) Pend(text string, f func(), _ ...Option) {
 }
 
 // Focus skips all specs except the focused grouping and other focused specs.
-// Valid Options: Parallel(), Sequential(), Random(), Reverse(), Nest()
+//
+// Valid Options:
+// Parallel(), Sequential(), Random(), Reverse(), Nest(), Local(), Global()
 func (g G) Focus(text string, f func(), opts ...Option) {
 	g(text, f, append(opts, func(c *config) { c.focus = true })...)
 }
 
 // S is a spec.
+//
 // Valid Options: Parallel()
 type S func(text string, f func(), opts ...Option)
 
@@ -40,6 +45,7 @@ func (s S) Pend(text string, f func(), _ ...Option) {
 }
 
 // Focus skips all specs except the focused spec and other focused specs.
+//
 // Valid Options: Parallel()
 func (s S) Focus(text string, f func(), opts ...Option) {
 	s(text, f, append(opts, func(c *config) { c.focus = true })...)
@@ -47,12 +53,17 @@ func (s S) Focus(text string, f func(), opts ...Option) {
 
 // Run is a top-level grouping of specs.
 // Unlike other testing libraries, it is re-evaluated for each spec.
-// Valid Options: Parallel(), Sequential(), Random(), Reverse(), Nest(), Seed()
-func Run(t *testing.T, f func(*testing.T, G, S), opts ...Option) bool {
+//
+// Valid Options:
+// Parallel(), Sequential(), Random(), Reverse(), Nest(), Local(), Global()
+func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bool {
 	cfg := options(opts).apply()
 	n := &node{
+		name:  []string{text},
 		seed:  cfg.seed,
 		order: cfg.order.from(orderSequential),
+		scope: cfg.scope.from(scopeLocal),
+		nest:  cfg.nest,
 		pend:  cfg.pend,
 		focus: cfg.focus,
 	}
@@ -65,7 +76,7 @@ func Run(t *testing.T, f func(*testing.T, G, S), opts ...Option) bool {
 		t.Log("Focus is active.")
 	}
 
-	return n.nodes.run(t, func(t *testing.T, n node) {
+	return n.run(t, func(t *testing.T, n node) {
 		switch {
 		case n.pend, sum.focus && !n.focus:
 			t.SkipNow()
@@ -78,7 +89,7 @@ func Run(t *testing.T, f func(*testing.T, G, S), opts ...Option) bool {
 		)
 		f(t, func(_ string, f func(), _ ...Option) {
 			switch {
-			case len(n.loc) < 2, n.loc[0] > 0:
+			case len(n.loc) == 1, n.loc[0] > 0:
 				n.loc[0]--
 			default:
 				n.loc = n.loc[1:]
@@ -98,11 +109,9 @@ func Run(t *testing.T, f func(*testing.T, G, S), opts ...Option) bool {
 				spec = f
 			}
 		})
-
 		if spec == nil {
 			t.Fatal("Failed to locate spec.")
 		}
-
 		run(before...)
 		defer run(after...)
 		run(spec)
