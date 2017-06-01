@@ -11,7 +11,7 @@ Spec differs from other BDD libraries for Go in that it:
 - Does not provide assertions
 - Does not encourage the use of dot-imports
 - Does not reuse any closures between test runs (to avoid test pollution)
-- Does not use global state, interface types, or reflection
+- Does not use global state, excessive interface types, or reflection
 
 Spec is intended for gophers who want to write BDD tests in idiomatic Go using
 the standard library `testing` package. Spec aims to do "one thing right,"
@@ -24,6 +24,8 @@ organization.
 - Supports focusing and pending tests
 - Supports sequential, random, reverse, and parallel test order
 - Provides granular control over test order and subtest nesting
+- Provides a generic, asynchronous reporting interface
+- Provides multiple reporter implementations
 
 ### Notes
 
@@ -32,8 +34,6 @@ organization.
 ### Todo
 
 - Test coverage
-- it.JustBefore/it.JustAfter
-- Reporters
 
 ### Examples
 
@@ -95,7 +95,7 @@ func TestObject(t *testing.T) {
                     t.Error("bad result")
                 }
             })
-        }, spec.Parallel())
+        }, spec.Parallel(), spec.Report(report.Terminal{}))
     })
 }
 ```

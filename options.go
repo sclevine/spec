@@ -1,9 +1,25 @@
 package spec
 
-import "time"
-
 // An Option is used to control the behavior of a call to Run, G, or S.
+// Options are inherited by subgroups and subspecs.
+//
+// Example:
+// If the top-level Run group is specified as Random(), each subgroup will
+// inherit the Random() order. This means that each group will be randomized
+// individually, unless another ordering is specified on any of the subgroups.
+// If the Run group is also passed Global(), then all specs inside Run will run
+// in completely random order, regardless of any ordering specified on the
+// subgroups.
 type Option func(*config)
+
+// Report specifies a Reporter for a suite.
+//
+// Valid Option for: Run
+func Report(r Reporter) Option {
+	return func(c *config) {
+		c.report = r
+	}
+}
 
 // Seed specifies the random seed used for any randomized specs in a Run block.
 // The random seed is always displayed before specs are run.
@@ -80,7 +96,7 @@ func Global() Option {
 	}
 }
 
-// Nested runs each group of specs in a parent subtest.
+// Nested indicates that a parent subtest should be created for the group.
 // This allows for more control over parallelism.
 //
 // Valid Option for: Run, G
@@ -90,7 +106,7 @@ func Nested() Option {
 	}
 }
 
-// Flat runs each spec .
+// Flat indicates that a parent subtest should not be created for the group.
 // This is the default behavior.
 //
 // Valid Option for: Run, G
@@ -111,7 +127,7 @@ const (
 )
 
 func (o order) or(last order) order {
-	return order(inheritZero(int(o), int(last)))
+	return order(defaultZero(int(o), int(last)))
 }
 
 type scope int
@@ -123,7 +139,7 @@ const (
 )
 
 func (s scope) or(last scope) scope {
-	return scope(inheritZero(int(s), int(last)))
+	return scope(defaultZero(int(s), int(last)))
 }
 
 type nest int
@@ -135,16 +151,21 @@ const (
 )
 
 func (n nest) or(last nest) nest {
-	return nest(inheritZero(int(n), int(last)))
+	return nest(defaultZero(int(n), int(last)))
 }
 
-func inheritZero(next, last int) int {
-	switch next {
-	case 0:
+func defaultZero(next, last int) int {
+	if next == 0 {
 		return last
-	default:
-		return next
 	}
+	return next
+}
+
+func defaultZero64(next, last int64) int64 {
+	if next == 0 {
+		return last
+	}
+	return next
 }
 
 type config struct {
@@ -156,6 +177,7 @@ type config struct {
 	focus  bool
 	before bool
 	after  bool
+	report Reporter
 }
 
 type options []Option
@@ -164,9 +186,6 @@ func (o options) apply() *config {
 	cfg := &config{}
 	for _, opt := range o {
 		opt(cfg)
-	}
-	if cfg.seed == 0 {
-		cfg.seed = time.Now().Unix()
 	}
 	return cfg
 }

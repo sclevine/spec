@@ -6,16 +6,8 @@ import (
 	"testing"
 )
 
-type summary struct {
-	total   int
-	pending int
-	focused int
-	random  bool
-	focus   bool
-}
-
 type node struct {
-	name  []string
+	text  []string
 	loc   []int
 	seed  int64
 	order order
@@ -26,20 +18,20 @@ type node struct {
 	nodes tree
 }
 
-func (n *node) parse(f func(*testing.T, G, S)) summary {
-	var sum summary
+func (n *node) parse(f func(*testing.T, G, S)) Plan {
+	// TODO: validate Options
+	plan := Plan{
+		Text: n.text[0],
+		Seed: n.seed,
+	}
 	f(nil, func(text string, f func(), opts ...Option) {
 		cfg := options(opts).apply()
-		if pend, focus := n.add(text, cfg, tree{}); focus && !pend {
-			sum.focus = true
-		}
+		n.add(text, cfg, tree{})
 		parent := n
 		n = n.last()
+		updatePlan(&plan, n)
 		defer func() {
-			if n.order == orderRandom {
-				sum.random = true
-			}
-			n.flatten()
+			n.level()
 			n.sort()
 			n = parent
 		}()
@@ -49,38 +41,45 @@ func (n *node) parse(f func(*testing.T, G, S)) summary {
 		if cfg.before || cfg.after {
 			return
 		}
-		if pend, focus := n.add(text, cfg, nil); focus && !pend {
-			sum.focus = true
-			sum.focused++
-		} else if pend {
-			sum.pending++
-		}
-		sum.total++
+		n.add(text, cfg, nil)
+		updatePlan(&plan, n.last())
 	})
-	return sum
+	return plan
 }
 
-func (n *node) add(text string, cfg *config, nodes tree) (pend, focus bool) {
-	// TODO: cfg validation logic here
+func updatePlan(plan *Plan, n *node) {
+	if n.focus && !n.pend {
+		plan.HasFocus = true
+	}
+	if n.order == orderRandom {
+		plan.HasRandom = true
+	}
+	if n.nodes == nil {
+		plan.Total++
+		if n.focus && !n.pend {
+			plan.Focused++
+		} else if n.pend {
+			plan.Pending++
+		}
+	}
+}
 
-	name := n.name
+func (n *node) add(text string, cfg *config, nodes tree) {
+	name := n.text
 	if n.nest == nestOn {
 		name = nil
 	}
-	pend = cfg.pend || n.pend
-	focus = cfg.focus || n.focus
 	n.nodes = append(n.nodes, node{
-		name:  append(append([]string(nil), name...), text),
+		text:  append(append([]string(nil), name...), text),
 		loc:   append(append([]int(nil), n.loc...), len(n.nodes)),
 		seed:  n.seed,
 		order: cfg.order.or(n.order),
 		scope: cfg.scope.or(n.scope),
 		nest:  cfg.nest.or(n.nest),
-		pend:  pend,
-		focus: focus,
+		pend:  cfg.pend || n.pend,
+		focus: cfg.focus || n.focus,
 		nodes: nodes,
 	})
-	return pend, focus
 }
 
 func (n *node) sort() {
@@ -100,7 +99,7 @@ func (n *node) sort() {
 	}
 }
 
-func (n *node) flatten() {
+func (n *node) level() {
 	nodes := n.nodes
 	switch n.scope {
 	case scopeGlobal:
@@ -121,11 +120,11 @@ func (n *node) last() *node {
 }
 
 func (n node) run(t *testing.T, f func(*testing.T, node)) bool {
-	name := strings.Join(n.name, "/")
+	name := strings.Join(n.text, "/")
 	switch {
 	case n.nodes == nil:
 		return t.Run(name, func(t *testing.T) { f(t, n) })
-	case n.nest == nestOn:
+	case n.nest == nestOn || len(n.text) == 1:
 		return t.Run(name, func(t *testing.T) { n.nodes.run(t, f) })
 	default:
 		return n.nodes.run(t, f)

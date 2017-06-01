@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/sclevine/spec"
+	"github.com/sclevine/spec/report"
 )
 
 func TestSpec(t *testing.T) {
@@ -135,5 +136,5 @@ func TestSpec(t *testing.T) {
 				})
 			})
 		})
-	})
+	}, spec.Report(report.Terminal{}))
 }
