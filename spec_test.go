@@ -6,39 +6,83 @@ import (
 
 	"github.com/sclevine/spec"
 	"github.com/sclevine/spec/report"
+	"strings"
 )
 
-func record(t *testing.T) (s func(*testing.T) func(), calls func() []string) {
-	var names []string
+type call struct {
+	name string
+	count int
+}
+
+func recordCalls(t *testing.T) (s func(*testing.T) func(), c func() []call) {
+	var calls []call
 	return func(ts *testing.T) func() {
 		return func() {
 			if ts == nil {
 				t.Fatal("Spec running during parse phase for:", t.Name())
 			}
-			names = append(names, ts.Name())
+			name := strings.TrimPrefix(ts.Name(), t.Name() + "/")
+			if len(calls) > 0 && calls[len(calls)-1].name == name {
+				calls[len(calls)-1].count++
+			} else {
+				calls = append(calls, call{name, 1})
+			}
+		}
+	}, func() []call {
+		return calls
+	}
+}
+
+type recorder func(*testing.T, ...string) func()
+
+func record(t *testing.T) (s recorder, c func() []string) {
+	var calls []string
+	return func(ts *testing.T, text ...string) func() {
+		return func() {
+			if ts == nil {
+				t.Fatal("Spec running during parse phase for:", t.Name())
+			}
+			name := strings.TrimPrefix(ts.Name(), t.Name() + "/")
+			if suffix := strings.Join(text, "/"); suffix != "" {
+				name += " - " + suffix
+			}
+			calls = append(calls, name)
 		}
 	}, func() []string {
-		return names
+		return calls
 	}
+}
+
+func testCases(when spec.G, it spec.S, s recorder, t *testing.T) {
+	it.Before(s(t, "Before"))
+	it.After(s(t, "After"))
+
+	it("S", s(t))
+	it.Pend("S.Pend", s(t))
+	it.Focus("S.Focus", s(t))
+
+	when("G", func() {
+		it.Before(s(t, "Before", "G"))
+		it.After(s(t, "After", "G"))
+		it("G.S", s(t))
+	})
+	when.Pend("G.Pend", func() {
+		it.Before(s(t, "Before", "G.Pend"))
+		it.After(s(t, "After", "G.Pend"))
+		it("G.Pend.S", s(t))
+	})
+	when.Focus("G.Focus", func() {
+		it.Before(s(t, "Before", "G.Focus"))
+		it.After(s(t, "After", "G.Focus"))
+		it("G.Focus.S", s(t))
+	})
 }
 
 func TestPend(t *testing.T) {
 	s, calls := record(t)
 
 	spec.Pend(t, "Pend", func(t *testing.T, when spec.G, it spec.S) {
-		it("S", s(t))
-		it.Pend("S.Pend", s(t))
-		it.Focus("S.Focus", s(t))
-
-		when("G", func() {
-			it("S", s(t))
-		})
-		when.Pend("G.Pend", func() {
-			it("S", s(t))
-		})
-		when.Focus("G.Focus", func() {
-			it("S", s(t))
-		})
+		testCases(when, it, s(t))
 	})
 	
 	if len(calls()) != 0 {
@@ -51,19 +95,7 @@ func TestGPend(t *testing.T) {
 	
 	spec.Run(t, "Run", func(t *testing.T, when spec.G, it spec.S) {
 		when.Pend("G.Pend", func() {
-			it("S", s(t))
-			it.Pend("S.Pend", s(t))
-			it.Focus("S.Focus", s(t))
-
-			when("G", func() {
-				it("S", s(t))
-			})
-			when.Pend("G.Pend", func() {
-				it("S", s(t))
-			})
-			when.Focus("G.Focus", func() {
-				it("S", s(t))
-			})
+			testCases(when, it, s(t))
 		})
 	})
 	
@@ -84,53 +116,18 @@ func TestSPend(t *testing.T) {
 	}
 }
 
-func testCases(when spec.G, it spec.S, f func()) {
-	it.Before(f)
-	it.After(f)
-
-	it("S", f)
-	it.Pend("S.Pend", f)
-	it.Focus("S.Focus", f)
-
-	when("G", func() {
-		it.Before(f)
-		it.After(f)
-		it("S", f)
-	})
-	when.Pend("G.Pend", func() {
-		it.Before(f)
-		it.After(f)
-		it("S", f)
-	})
-	when.Focus("G.Focus", func() {
-		it.Before(f)
-		it.After(f)
-		it("S", f)
-	})
-}
-
 func TestFocus(t *testing.T) {
 	s, calls := record(t)
-	
-	spec.Focus(t, "Focus", func(t *testing.T, when spec.G, it spec.S) {
-		it("S", s(t))
-		it.Pend("S.Pend", s(t))
-		it.Focus("S.Focus", s(t))
 
-		when("G", func() {
-			it("S", s(t))
-		})
-		when.Pend("G.Pend", func() {
-			it("S", s(t))
-		})
-		when.Focus("G.Focus", func() {
-			it("S", s(t))
-		})
+	spec.Focus(t, "Focus", func(t *testing.T, when spec.G, it spec.S) {
+		testCases(when, it, s(t))
 	})
 	
-	if !reflect.DeepEqual(calls(), []string{
-		"Focus/S", "Focus/S.Focus",
-		"Focus/G/S", "Focus/G.Focus/S",
+	if !reflect.DeepEqual(calls(), []call{
+		{"Focus/S", 3},
+		{"Focus/S.Focus", 3},
+		{"Focus/G/S", 5},
+		{"Focus/G.Focus/S", 5},
 	}) {
 		t.Fatal("Incorrect focus:", calls())
 	}
@@ -141,24 +138,17 @@ func TestGFocus(t *testing.T) {
 	
 	spec.Run(t, "Run", func(t *testing.T, when spec.G, it spec.S) {
 		when.Focus("G.Focus", func() {
-			it("S", s(t))
-			it.Pend("S.Pend", s(t))
-			it.Focus("S.Focus", s(t))
-
-			when("G", func() {
-				it("S", s(t))
-			})
-			when.Pend("G.Pend", func() {
-				it("S", s(t))
-			})
-			when.Focus("G.Focus", func() {
-				it("S", s(t))
-			})
+			testCases(when, it, s(t))
 		})
 	})
-	
-	if len(calls()) > 0 {
-		t.Fatal("Failed to Focus:", calls())
+
+	if !reflect.DeepEqual(calls(), []call{
+		{"Run/G.Focus/S", 3},
+		{"Run/G.Focus/S.Focus", 3},
+		{"Run/G.Focus/G/S", 5},
+		{"Run/G.Focus/G.Focus/S", 5},
+	}) {
+		t.Fatal("Incorrect focus:", calls())
 	}
 }
 
@@ -166,11 +156,35 @@ func TestSFocus(t *testing.T) {
 	s, calls := record(t)
 	
 	spec.Run(t, "Run", func(t *testing.T, when spec.G, it spec.S) {
-		it.Focus("S", s(t))
+		it.Focus("S.Focus", s(t))
 	})
-	
-	if len(calls()) > 0 {
-		t.Fatal("Failed to Focus:", calls())
+
+	if !reflect.DeepEqual(calls(), []call{
+		{"Run/S.Focus", 1},
+	}) {
+		t.Fatal("Incorrect focus:", calls())
+	}
+}
+
+func TestSBefore(t *testing.T) {
+	s, calls := record(t)
+
+	spec.Run(t, "Run", func(t *testing.T, when spec.G, it spec.S) {
+		it.Before(s(t))
+		it("S", s(t))
+		when("G", func() {
+			it.Before(s(t))
+			it("S", s(t))
+		})
+	})
+
+	if !reflect.DeepEqual(calls(), []call{
+		{"Focus/S", 3},
+		{"Focus/S.Focus", 3},
+		{"Focus/G/S", 5},
+		{"Focus/G.Focus/S", 5},
+	}) {
+		t.Fatal("Incorrect focus:", calls())
 	}
 }
 
