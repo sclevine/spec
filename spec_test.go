@@ -2,10 +2,177 @@ package spec_test
 
 import (
 	"testing"
+	"reflect"
 
 	"github.com/sclevine/spec"
 	"github.com/sclevine/spec/report"
 )
+
+func record(t *testing.T) (s func(*testing.T) func(), calls func() []string) {
+	var names []string
+	return func(ts *testing.T) func() {
+		return func() {
+			if ts == nil {
+				t.Fatal("Spec running during parse phase for:", t.Name())
+			}
+			names = append(names, ts.Name())
+		}
+	}, func() []string {
+		return names
+	}
+}
+
+func TestPend(t *testing.T) {
+	s, calls := record(t)
+
+	spec.Pend(t, "Pend", func(t *testing.T, when spec.G, it spec.S) {
+		it("S", s(t))
+		it.Pend("S.Pend", s(t))
+		it.Focus("S.Focus", s(t))
+
+		when("G", func() {
+			it("S", s(t))
+		})
+		when.Pend("G.Pend", func() {
+			it("S", s(t))
+		})
+		when.Focus("G.Focus", func() {
+			it("S", s(t))
+		})
+	})
+	
+	if len(calls()) != 0 {
+		t.Fatal("Failed to pend:", calls())
+	}
+}
+
+func TestGPend(t *testing.T) {
+	s, calls := record(t)
+	
+	spec.Run(t, "Run", func(t *testing.T, when spec.G, it spec.S) {
+		when.Pend("G.Pend", func() {
+			it("S", s(t))
+			it.Pend("S.Pend", s(t))
+			it.Focus("S.Focus", s(t))
+
+			when("G", func() {
+				it("S", s(t))
+			})
+			when.Pend("G.Pend", func() {
+				it("S", s(t))
+			})
+			when.Focus("G.Focus", func() {
+				it("S", s(t))
+			})
+		})
+	})
+	
+	if len(calls()) != 0 {
+		t.Fatal("Failed to pend:", calls())
+	}
+}
+
+func TestSPend(t *testing.T) {
+	s, calls := record(t)
+	
+	spec.Run(t, "Run", func(t *testing.T, when spec.G, it spec.S) {
+		it.Pend("S", s(t))
+	})
+	
+	if len(calls()) != 0 {
+		t.Fatal("Failed to pend:", calls())
+	}
+}
+
+func testCases(when spec.G, it spec.S, f func()) {
+	it.Before(f)
+	it.After(f)
+
+	it("S", f)
+	it.Pend("S.Pend", f)
+	it.Focus("S.Focus", f)
+
+	when("G", func() {
+		it.Before(f)
+		it.After(f)
+		it("S", f)
+	})
+	when.Pend("G.Pend", func() {
+		it.Before(f)
+		it.After(f)
+		it("S", f)
+	})
+	when.Focus("G.Focus", func() {
+		it.Before(f)
+		it.After(f)
+		it("S", f)
+	})
+}
+
+func TestFocus(t *testing.T) {
+	s, calls := record(t)
+	
+	spec.Focus(t, "Focus", func(t *testing.T, when spec.G, it spec.S) {
+		it("S", s(t))
+		it.Pend("S.Pend", s(t))
+		it.Focus("S.Focus", s(t))
+
+		when("G", func() {
+			it("S", s(t))
+		})
+		when.Pend("G.Pend", func() {
+			it("S", s(t))
+		})
+		when.Focus("G.Focus", func() {
+			it("S", s(t))
+		})
+	})
+	
+	if !reflect.DeepEqual(calls(), []string{
+		"Focus/S", "Focus/S.Focus",
+		"Focus/G/S", "Focus/G.Focus/S",
+	}) {
+		t.Fatal("Incorrect focus:", calls())
+	}
+}
+
+func TestGFocus(t *testing.T) {
+	s, calls := record(t)
+	
+	spec.Run(t, "Run", func(t *testing.T, when spec.G, it spec.S) {
+		when.Focus("G.Focus", func() {
+			it("S", s(t))
+			it.Pend("S.Pend", s(t))
+			it.Focus("S.Focus", s(t))
+
+			when("G", func() {
+				it("S", s(t))
+			})
+			when.Pend("G.Pend", func() {
+				it("S", s(t))
+			})
+			when.Focus("G.Focus", func() {
+				it("S", s(t))
+			})
+		})
+	})
+	
+	if len(calls()) > 0 {
+		t.Fatal("Failed to Focus:", calls())
+	}
+}
+
+func TestSFocus(t *testing.T) {
+	s, calls := record(t)
+	
+	spec.Run(t, "Run", func(t *testing.T, when spec.G, it spec.S) {
+		it.Focus("S", s(t))
+	})
+	
+	if len(calls()) > 0 {
+		t.Fatal("Failed to Focus:", calls())
+	}
+}
 
 func TestSpec(t *testing.T) {
 	spec.Run(t, "spec", func(t *testing.T, when spec.G, it spec.S) {

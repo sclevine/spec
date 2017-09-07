@@ -66,7 +66,7 @@ func updatePlan(plan *Plan, n *node) {
 
 func (n *node) add(text string, cfg *config, nodes tree) {
 	name := n.text
-	if n.nest == nestOn {
+	if n.nested() {
 		name = nil
 	}
 	n.nodes = append(n.nodes, node{
@@ -119,12 +119,16 @@ func (n *node) last() *node {
 	return &n.nodes[len(n.nodes)-1]
 }
 
+func (n *node) nested() bool {
+	return n.nest == nestOn || len(n.loc) == 0
+}
+
 func (n node) run(t *testing.T, f func(*testing.T, node)) bool {
 	name := strings.Join(n.text, "/")
 	switch {
 	case n.nodes == nil:
 		return t.Run(name, func(t *testing.T) { f(t, n) })
-	case n.nest == nestOn || len(n.text) == 1:
+	case n.nested():
 		return t.Run(name, func(t *testing.T) { n.nodes.run(t, f) })
 	default:
 		return n.nodes.run(t, f)

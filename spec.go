@@ -151,6 +151,23 @@ func run(fs ...func()) {
 	}
 }
 
+// Pend skips the suite.
+//
+// All Options are ignored.
+func Pend(t *testing.T, text string, f func(*testing.T, G, S), _ ...Option) bool {
+	return Run(t, text, f, func(c *config) { c.pend = true })
+}
+
+// Focus focuses every spec in the suite.
+// This is useful as a shortcut for unfocusing all focused specs.
+//
+// Valid Options:
+// Sequential(), Random(), Reverse(), Parallel()
+// Local(), Global(), Flat(), Nested()
+func Focus(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bool {
+	return Run(t, text, f, append(opts, func(c *config) { c.focus = true })...)
+}
+
 // A Plan provides a Reporter with information about a suite.
 type Plan struct {
 	Text      string
@@ -160,7 +177,7 @@ type Plan struct {
 	Seed      int64
 	HasRandom bool
 	HasFocus  bool
-};
+}
 
 // A Spec provides a Reporter with information about a spec immediately after
 // the spec completes.
@@ -174,6 +191,13 @@ type Spec struct {
 
 // A Reporter is provided with information about a suite as it runs.
 type Reporter interface {
+
+	// Start provides the Reporter with a Plan that describes the suite.
+	// No specs will run until the Start method call finishes.
 	Start(*testing.T, Plan)
+
+	// Specs provides the Reporter with a channel of Specs.
+	// The specs will start running concurrently with the Specs method call.
+	// The Run method will not complete until the Specs method call completes.
 	Specs(*testing.T, <-chan Spec)
 }
