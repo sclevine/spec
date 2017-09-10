@@ -111,7 +111,7 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 			t.Parallel()
 		}
 		var (
-			spec, next    func()
+			spec, group   func()
 			before, after []func()
 			afterIdx      int
 		)
@@ -120,36 +120,17 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 			switch {
 			case len(n.loc) == 1, n.loc[0] > 0:
 				n.loc[0]--
-			default:
-
-				//if next == nil {
-				//	next = f
-				//} else {
-				//	next()
-				//	next = f
-				//}
-
-				//if next == nil {
-				//	next = f
-				//	next()
-				//} else {
-				//	next()
-				//	next = f
-				//}
-
-				if n.loc[0] == 0 {
-					next = func() {
-						n.loc = n.loc[1:]
-						next = nil
-						afterIdx = 0
-						f()
-						if next != nil {
-							next()
-						}
+			case n.loc[0] == 0:
+				group = func() {
+					n.loc = n.loc[1:]
+					afterIdx = 0
+					group = nil
+					f()
+					if group != nil {
+						group()
 					}
 				}
 				n.loc[0] = -1
-
 			}
 		}, func(_ string, f func(), opts ...Option) {
 			cfg := options(opts).apply()
@@ -166,8 +147,8 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 				spec = f
 			}
 		})
-		if next != nil {
-			next()
+		if group != nil {
+			group()
 		}
 		if spec == nil {
 			t.Fatal("Failed to locate spec.")
