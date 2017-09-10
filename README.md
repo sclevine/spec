@@ -95,8 +95,8 @@ func TestObject(t *testing.T) {
                     t.Error("bad result")
                 }
             })
-        }, spec.Parallel(), spec.Report(report.Terminal{}))
-    })
+        }, spec.Parallel())
+    }, spec.Report(report.Terminal{}))
 }
 ```
 

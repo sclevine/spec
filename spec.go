@@ -111,16 +111,45 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 			t.Parallel()
 		}
 		var (
-			spec          func()
+			spec, next    func()
 			before, after []func()
+			afterIdx      int
 		)
+
 		f(t, func(_ string, f func(), _ ...Option) {
 			switch {
 			case len(n.loc) == 1, n.loc[0] > 0:
 				n.loc[0]--
 			default:
-				n.loc = n.loc[1:]
-				f()
+
+				//if next == nil {
+				//	next = f
+				//} else {
+				//	next()
+				//	next = f
+				//}
+
+				//if next == nil {
+				//	next = f
+				//	next()
+				//} else {
+				//	next()
+				//	next = f
+				//}
+
+				if n.loc[0] == 0 {
+					next = func() {
+						n.loc = n.loc[1:]
+						next = nil
+						afterIdx = 0
+						f()
+						if next != nil {
+							next()
+						}
+					}
+				}
+				n.loc[0] = -1
+
 			}
 		}, func(_ string, f func(), opts ...Option) {
 			cfg := options(opts).apply()
@@ -128,7 +157,8 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 			case cfg.before:
 				before = append(before, f)
 			case cfg.after:
-				after = append([]func(){f}, after...)
+				after = insert(after, f, afterIdx)
+				afterIdx++
 			case spec != nil:
 			case len(n.loc) > 1, n.loc[0] > 0:
 				n.loc[0]--
@@ -136,6 +166,9 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 				spec = f
 			}
 		})
+		if next != nil {
+			next()
+		}
 		if spec == nil {
 			t.Fatal("Failed to locate spec.")
 		}
@@ -149,6 +182,13 @@ func run(fs ...func()) {
 	for _, f := range fs {
 		f()
 	}
+}
+
+func insert(fs []func(), f func(), i int) []func() {
+	fs = append(fs, nil)
+	copy(fs[i+1:], fs[i:])
+	fs[i] = f
+	return fs
 }
 
 // Pend skips the suite.

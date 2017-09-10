@@ -29,7 +29,7 @@ func (n *node) parse(f func(*testing.T, G, S)) Plan {
 		n.add(text, cfg, tree{})
 		parent := n
 		n = n.last()
-		updatePlan(&plan, n)
+		plan.update(n)
 		defer func() {
 			n.level()
 			n.sort()
@@ -42,24 +42,24 @@ func (n *node) parse(f func(*testing.T, G, S)) Plan {
 			return
 		}
 		n.add(text, cfg, nil)
-		updatePlan(&plan, n.last())
+		plan.update(n.last())
 	})
 	return plan
 }
 
-func updatePlan(plan *Plan, n *node) {
+func (p *Plan) update(n *node) {
 	if n.focus && !n.pend {
-		plan.HasFocus = true
+		p.HasFocus = true
 	}
 	if n.order == orderRandom {
-		plan.HasRandom = true
+		p.HasRandom = true
 	}
 	if n.nodes == nil {
-		plan.Total++
+		p.Total++
 		if n.focus && !n.pend {
-			plan.Focused++
+			p.Focused++
 		} else if n.pend {
-			plan.Pending++
+			p.Pending++
 		}
 	}
 }
