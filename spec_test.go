@@ -51,6 +51,26 @@ func testCases(when spec.G, it spec.S, s recorder, t *testing.T) {
 	})
 }
 
+func TestRun(t *testing.T) {
+	s, calls := record(t)
+
+	spec.Run(t, "Run", func(t *testing.T, when spec.G, it spec.S) {
+		testCases(when, it, s, t)
+	})
+
+	if !reflect.DeepEqual(calls(), []string{
+		"Run/S.Focus->Before",
+		"Run/S.Focus->S.Focus",
+		"Run/S.Focus->After",
+
+		"Run/G.Focus/G.Focus.S->Before", "Run/G.Focus/G.Focus.S->G.Focus.Before",
+		"Run/G.Focus/G.Focus.S->G.Focus.S",
+		"Run/G.Focus/G.Focus.S->G.Focus.After", "Run/G.Focus/G.Focus.S->After",
+	}) {
+		t.Fatal("Incorrect order:", calls())
+	}
+}
+
 func TestPend(t *testing.T) {
 	s, calls := record(t)
 
@@ -113,7 +133,7 @@ func TestFocus(t *testing.T) {
 		"Focus/G.Focus/G.Focus.S->G.Focus.S",
 		"Focus/G.Focus/G.Focus.S->G.Focus.After", "Focus/G.Focus/G.Focus.S->After",
 	}) {
-		t.Fatal("Incorrect focus:", calls())
+		t.Fatal("Incorrect order:", calls())
 	}
 }
 
@@ -143,7 +163,7 @@ func TestGFocus(t *testing.T) {
 		"Run/Run.G.Focus/G.Focus/G.Focus.S->G.Focus.S",
 		"Run/Run.G.Focus/G.Focus/G.Focus.S->G.Focus.After", "Run/Run.G.Focus/G.Focus/G.Focus.S->After",
 	}) {
-		t.Fatal("Incorrect focus:", calls())
+		t.Fatal("Incorrect order:", calls())
 	}
 }
 
@@ -157,7 +177,7 @@ func TestSFocus(t *testing.T) {
 	if !reflect.DeepEqual(calls(), []string{
 		"Run/S.Focus->S.Focus",
 	}) {
-		t.Fatal("Incorrect focus:", calls())
+		t.Fatal("Incorrect order:", calls())
 	}
 }
 

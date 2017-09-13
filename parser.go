@@ -44,6 +44,8 @@ func (n *node) parse(f func(*testing.T, G, S)) Plan {
 		n.add(text, cfg, nil)
 		plan.update(n.last())
 	})
+	n.level()
+	n.sort()
 	return plan
 }
 

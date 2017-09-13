@@ -115,6 +115,7 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 			before, after []func()
 			afterIdx      int
 		)
+		group = func() {}
 
 		f(t, func(_ string, f func(), _ ...Option) {
 			switch {
@@ -124,13 +125,11 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 				group = func() {
 					n.loc = n.loc[1:]
 					afterIdx = 0
-					group = nil
+					group = func() {}
 					f()
-					if group != nil {
-						group()
-					}
+					group()
 				}
-				n.loc[0] = -1
+				n.loc[0]--
 			}
 		}, func(_ string, f func(), opts ...Option) {
 			cfg := options(opts).apply()
@@ -147,9 +146,8 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 				spec = f
 			}
 		})
-		if group != nil {
-			group()
-		}
+		group()
+
 		if spec == nil {
 			t.Fatal("Failed to locate spec.")
 		}
