@@ -8,6 +8,7 @@ library `testing` package by facilitating easy organization of Go 1.7+
 
 Spec differs from other BDD libraries for Go in that it:
 - Does not reimplement or replace any functionality of the `testing` package
+- Does not provide an alternative test parallelization strategy to the `testing` package
 - Does not provide assertions
 - Does not encourage the use of dot-imports
 - Does not reuse any closures between test runs (to avoid test pollution)
@@ -30,10 +31,6 @@ organization.
 ### Notes
 
 - Use `go test -v` to see individual subtests.
-
-### Todo
-
-- Test coverage
 
 ### Examples
 

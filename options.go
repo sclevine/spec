@@ -96,16 +96,6 @@ func Global() Option {
 	}
 }
 
-// Nested indicates that a parent subtest should be created for the group.
-// This allows for more control over parallelism.
-//
-// Valid Option for: Run, G
-func Nested() Option {
-	return func(c *config) {
-		c.nest = nestOn
-	}
-}
-
 // Flat indicates that a parent subtest should not be created for the group.
 // This is the default behavior.
 //
@@ -113,6 +103,16 @@ func Nested() Option {
 func Flat() Option {
 	return func(c *config) {
 		c.nest = nestOff
+	}
+}
+
+// Nested indicates that a parent subtest should be created for the group.
+// This allows for more control over parallelism.
+//
+// Valid Option for: Run, G
+func Nested() Option {
+	return func(c *config) {
+		c.nest = nestOn
 	}
 }
 
