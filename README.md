@@ -1,5 +1,6 @@
 # spec
 
+[![Build Status](https://travis-ci.org/sclevine/spec.svg?branch=master)](https://travis-ci.org/sclevine/spec)
 [![GoDoc](https://godoc.org/github.com/sclevine/spec?status.svg)](https://godoc.org/github.com/sclevine/spec)
 
 Spec is a simple BDD test organizer for Go. It minimally extends the standard
