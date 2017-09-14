@@ -26,7 +26,7 @@ func record(t *testing.T) (s recorder, c func() []string) {
 		}
 }
 
-func testCases(t *testing.T, when spec.G, it spec.S, s recorder) {
+func specTestCases(t *testing.T, when spec.G, it spec.S, s recorder) {
 	it.Before(s(t, "Before"))
 	it.After(s(t, "After"))
 
@@ -55,7 +55,7 @@ func TestRun(t *testing.T) {
 	s, calls := record(t)
 
 	spec.Run(t, "Run", func(t *testing.T, when spec.G, it spec.S) {
-		testCases(t, when, it, s)
+		specTestCases(t, when, it, s)
 	})
 
 	if !reflect.DeepEqual(calls(), []string{
@@ -75,7 +75,7 @@ func TestPend(t *testing.T) {
 	s, calls := record(t)
 
 	spec.Pend(t, "Pend", func(t *testing.T, when spec.G, it spec.S) {
-		testCases(t, when, it, s)
+		specTestCases(t, when, it, s)
 	})
 
 	if len(calls()) != 0 {
@@ -88,7 +88,7 @@ func TestGPend(t *testing.T) {
 
 	spec.Run(t, "Run", func(t *testing.T, when spec.G, it spec.S) {
 		when.Pend("Run.G.Pend", func() {
-			testCases(t, when, it, s)
+			specTestCases(t, when, it, s)
 		})
 	})
 
@@ -113,7 +113,7 @@ func TestFocus(t *testing.T) {
 	s, calls := record(t)
 
 	spec.Focus(t, "Focus", func(t *testing.T, when spec.G, it spec.S) {
-		testCases(t, when, it, s)
+		specTestCases(t, when, it, s)
 	})
 
 	if !reflect.DeepEqual(calls(), []string{
@@ -142,7 +142,7 @@ func TestGFocus(t *testing.T) {
 
 	spec.Run(t, "Run", func(t *testing.T, when spec.G, it spec.S) {
 		when.Focus("Run.G.Focus", func() {
-			testCases(t, when, it, s)
+			specTestCases(t, when, it, s)
 		})
 	})
 

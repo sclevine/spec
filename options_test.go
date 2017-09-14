@@ -2,13 +2,13 @@ package spec_test
 
 import (
 	"reflect"
+	"regexp"
 	"testing"
 
 	"github.com/sclevine/spec"
-	"regexp"
 )
 
-func testSpec(t *testing.T, it spec.S, s recorder, name string) {
+func optionTestSpec(t *testing.T, it spec.S, s recorder, name string) {
 	if name != "" {
 		name += "."
 	}
@@ -21,7 +21,7 @@ func testSpec(t *testing.T, it spec.S, s recorder, name string) {
 	it(name+"S", s(t, name+"S"))
 }
 
-func testSpecs(t *testing.T, it spec.S, s recorder, name string) {
+func optionTestSpecs(t *testing.T, it spec.S, s recorder, name string) {
 	if name != "" {
 		name += "."
 	}
@@ -31,25 +31,25 @@ func testSpecs(t *testing.T, it spec.S, s recorder, name string) {
 }
 
 func optionTestCases(t *testing.T, when spec.G, it spec.S, s recorder) {
-	testSpecs(t, it, s, "")
+	optionTestSpecs(t, it, s, "")
 	when("G", func() {
-		testSpec(t, it, s, "G")
+		optionTestSpec(t, it, s, "G")
 	})
 	when("G.Sequential", func() {
-		testSpecs(t, it, s, "G.Sequential")
+		optionTestSpecs(t, it, s, "G.Sequential")
 	}, spec.Sequential())
 	when("G.Reverse", func() {
-		testSpecs(t, it, s, "G.Reverse")
+		optionTestSpecs(t, it, s, "G.Reverse")
 	}, spec.Reverse())
 	when("G.Random.Local", func() {
-		testSpecs(t, it, s, "G.Random.Local")
+		optionTestSpecs(t, it, s, "G.Random.Local")
 	}, spec.Random(), spec.Local())
 	when("G.Random.Global", func() {
-		testSpecs(t, it, s, "G.Random.Global")
+		optionTestSpecs(t, it, s, "G.Random.Global")
 	}, spec.Random(), spec.Global())
 }
 
-func optionDefaultResults(t *testing.T, name string, seed int64) []string {
+func optionDefaultOrder(t *testing.T, name string, seed int64) []string {
 	s, calls := record(t)
 
 	spec.Run(t, name, func(t *testing.T, when spec.G, it spec.S) {
@@ -64,12 +64,78 @@ func optionDefaultResults(t *testing.T, name string, seed int64) []string {
 	return results
 }
 
-func TestSequential(t *testing.T) {
+type testReporter struct {
+	StartT, SpecsT *testing.T
+	StartPlan      spec.Plan
+	SpecOrder      []spec.Spec
+}
+
+func (tr *testReporter) Start(t *testing.T, plan spec.Plan) {
+	tr.StartT = t
+	tr.StartPlan = plan
+}
+
+func (tr *testReporter) Specs(t *testing.T, specs <-chan spec.Spec) {
+	tr.SpecsT = t
+	for s := range specs {
+		tr.SpecOrder = append(tr.SpecOrder, s)
+	}
+}
+
+func TestReport(t *testing.T) {
+	s, calls := record(t)
+	reporter := &testReporter{}
+
+	spec.Run(t, "Run", func(t *testing.T, when spec.G, it spec.S) {
+		optionTestCases(t, when, it, s)
+	}, spec.Report(reporter), spec.Seed(2))
+
+	if !reflect.DeepEqual(calls(), optionDefaultOrder(t, "Run", 2)) {
+		t.Fatal("Incorrect order:", calls())
+	}
+	if reporter.StartT != t {
+		t.Fatal("Incorrect value for t on start.")
+	}
+	if reporter.SpecsT != t {
+		t.Fatal("Incorrect value for t on spec run.")
+	}
+	if reporter.StartPlan != (spec.Plan{
+		Text:      "Run",
+		Total:     16,
+		Pending:   0,
+		Focused:   0,
+		Seed:      2,
+		HasRandom: true,
+		HasFocus:  false,
+	}) {
+		t.Fatal("Incorrect plan:", reporter.StartPlan)
+	}
+	if !reflect.DeepEqual(reporter.SpecOrder, []spec.Spec{
+		{Text: []string{"S.1"}}, {Text: []string{"S.2"}}, {Text: []string{"S.3"}},
+		{Text: []string{"G", "G.S"}},
+		{Text: []string{"G.Sequential", "G.Sequential.S.1"}},
+		{Text: []string{"G.Sequential", "G.Sequential.S.2"}},
+		{Text: []string{"G.Sequential", "G.Sequential.S.3"}},
+		{Text: []string{"G.Reverse", "G.Reverse.S.3"}},
+		{Text: []string{"G.Reverse", "G.Reverse.S.2"}},
+		{Text: []string{"G.Reverse", "G.Reverse.S.1"}},
+		{Text: []string{"G.Random.Local", "G.Random.Local.S.3"}},
+		{Text: []string{"G.Random.Local", "G.Random.Local.S.1"}},
+		{Text: []string{"G.Random.Local", "G.Random.Local.S.2"}},
+		{Text: []string{"G.Random.Global", "G.Random.Global.S.3"}},
+		{Text: []string{"G.Random.Global", "G.Random.Global.S.1"}},
+		{Text: []string{"G.Random.Global", "G.Random.Global.S.2"}},
+	}) {
+		t.Fatal("Incorrect reported order:", reporter.SpecOrder)
+	}
+}
+
+func TestDefault(t *testing.T) {
 	s, calls := record(t)
 
 	spec.Run(t, "Run", func(t *testing.T, when spec.G, it spec.S) {
 		optionTestCases(t, when, it, s)
-	}, spec.Sequential(), spec.Seed(2))
+	}, spec.Seed(2))
 
 	if !reflect.DeepEqual(calls(), []string{
 		"Run/S.1->S.1", "Run/S.2->S.2", "Run/S.3->S.3",
@@ -94,6 +160,18 @@ func TestSequential(t *testing.T) {
 		"Run/G.Random.Global/G.Random.Global.S.1->G.Random.Global.S.1",
 		"Run/G.Random.Global/G.Random.Global.S.2->G.Random.Global.S.2",
 	}) {
+		t.Fatal("Incorrect order:", calls())
+	}
+}
+
+func TestSequential(t *testing.T) {
+	s, calls := record(t)
+
+	spec.Run(t, "Run", func(t *testing.T, when spec.G, it spec.S) {
+		optionTestCases(t, when, it, s)
+	}, spec.Sequential(), spec.Seed(2))
+
+	if !reflect.DeepEqual(calls(), optionDefaultOrder(t, "Run", 2)) {
 		t.Fatal("Incorrect order:", calls())
 	}
 }
@@ -173,7 +251,7 @@ func TestLocal(t *testing.T) {
 		optionTestCases(t, when, it, s)
 	}, spec.Local(), spec.Seed(2))
 
-	if !reflect.DeepEqual(calls(), optionDefaultResults(t, "Run", 2)) {
+	if !reflect.DeepEqual(calls(), optionDefaultOrder(t, "Run", 2)) {
 		t.Fatal("Incorrect order:", calls())
 	}
 }
@@ -229,7 +307,7 @@ func TestFlat(t *testing.T) {
 		optionTestCases(t, when, it, s)
 	}, spec.Flat(), spec.Seed(2))
 
-	if !reflect.DeepEqual(calls(), optionDefaultResults(t, "Run", 2)) {
+	if !reflect.DeepEqual(calls(), optionDefaultOrder(t, "Run", 2)) {
 		t.Fatal("Incorrect order:", calls())
 	}
 }

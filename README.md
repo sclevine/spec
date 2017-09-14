@@ -34,21 +34,17 @@ organization.
 
 ### Examples
 
-[Most functionality is demonstrated here.](spec_test.go)
+[Most functionality is demonstrated here.](spec_test.go#L238)
 
 Quick example:
 
 ```go
 func TestObject(t *testing.T) {
     spec.Run(t, "object", func(t *testing.T, when spec.G, it spec.S) {
-        var (
-            someObject *myapp.Object
-            someMock   *mocks.Mock
-        )
+        var someObject *myapp.Object
 
         it.Before(func() {
             someObject = myapp.NewObject()
-            someMock = mocks.NewMock()
         })
 
         it.After(func() {
@@ -63,11 +59,10 @@ func TestObject(t *testing.T) {
 
         when("something happens", func() {
             it.Before(func() {
-                someMock.EXPECT().Setup("data").Return("stuff")
+                someObject.Connect()
             })
 
             it("should do one thing", func() {
-                someMock.EXPECT().Finish().Return("other stuff")
                 if err := someObject.DoThing(); err != nil {
                     t.Error(err)
                 }
