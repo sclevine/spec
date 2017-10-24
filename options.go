@@ -1,5 +1,7 @@
 package spec
 
+import "io"
+
 // An Option is used to control the behavior of a call to Run, G, or S.
 // Options are inherited by subgroups and subspecs.
 //
@@ -177,6 +179,7 @@ type config struct {
 	focus  bool
 	before bool
 	after  bool
+	out    func(io.Writer)
 	report Reporter
 }
 

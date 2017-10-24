@@ -22,10 +22,11 @@ organization.
 
 ### Features
 
-- Clean, simple, straightforward syntax
+- Clean, simple syntax
 - Supports focusing and pending tests
 - Supports sequential, random, reverse, and parallel test order
 - Provides granular control over test order and subtest nesting
+- Provides a test writer to manage test output
 - Provides a generic, asynchronous reporting interface
 - Provides multiple reporter implementations
 

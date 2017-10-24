@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/sclevine/spec"
+	"fmt"
+	"io/ioutil"
 )
 
 func optionTestSpec(t *testing.T, it spec.S, s recorder, name string) {
@@ -87,6 +89,14 @@ func TestReport(t *testing.T) {
 	reporter := &testReporter{}
 
 	spec.Run(t, "Run", func(t *testing.T, when spec.G, it spec.S) {
+		when("G.Out", func() {
+			it("Out.1", func() {
+				fmt.Fprint(it.Out(), "Out.1")
+			})
+			it("Out.2", func() {
+				fmt.Fprint(it.Out(), "Out.2")
+			})
+		}, spec.Reverse())
 		optionTestCases(t, when, it, s)
 	}, spec.Report(reporter), spec.Seed(2))
 
@@ -101,7 +111,7 @@ func TestReport(t *testing.T) {
 	}
 	if reporter.StartPlan != (spec.Plan{
 		Text:      "Run",
-		Total:     16,
+		Total:     18,
 		Pending:   0,
 		Focused:   0,
 		Seed:      2,
@@ -110,7 +120,25 @@ func TestReport(t *testing.T) {
 	}) {
 		t.Fatal("Incorrect plan:", reporter.StartPlan)
 	}
+
+	out2, err := ioutil.ReadAll(reporter.SpecOrder[0].Out)
+	if string(out2) != "Out.2" || err != nil {
+		t.Fatal("Incorrect output for Out.2 buffer.")
+	}
+	out1, err := ioutil.ReadAll(reporter.SpecOrder[1].Out)
+	if string(out1) != "Out.1" || err != nil {
+		t.Fatal("Incorrect output for Out.1 buffer.")
+	}
+	empty, err := ioutil.ReadAll(reporter.SpecOrder[2].Out)
+	if string(empty) != "" || err != nil {
+		t.Fatal("Incorrect output for empty buffer.")
+	}
+	for i := range reporter.SpecOrder {
+		reporter.SpecOrder[i].Out = nil
+	}
+
 	if !reflect.DeepEqual(reporter.SpecOrder, []spec.Spec{
+		{Text: []string{"G.Out", "Out.2"}}, {Text: []string{"G.Out", "Out.1"}},
 		{Text: []string{"S.1"}}, {Text: []string{"S.2"}}, {Text: []string{"S.3"}},
 		{Text: []string{"G", "G.S"}},
 		{Text: []string{"G.Sequential", "G.Sequential.S.1"}},

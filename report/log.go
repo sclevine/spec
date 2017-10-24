@@ -1,6 +1,7 @@
 package report
 
 import (
+	"io/ioutil"
 	"testing"
 
 	"github.com/sclevine/spec"
@@ -26,6 +27,11 @@ func (Log) Specs(t *testing.T, specs <-chan spec.Spec) {
 		switch {
 		case s.Failed:
 			failed++
+			if testing.Verbose() {
+				if out, err := ioutil.ReadAll(s.Out); err == nil {
+					t.Logf("%s", out)
+				}
+			}
 		case s.Skipped:
 			skipped++
 		default:

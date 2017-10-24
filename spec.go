@@ -1,6 +1,8 @@
 package spec
 
 import (
+	"bytes"
+	"io"
 	"testing"
 	"time"
 )
@@ -58,6 +60,20 @@ func (s S) Focus(text string, f func(), opts ...Option) {
 	s(text, f, append(opts, func(c *config) { c.focus = true })...)
 }
 
+// Out provides an dedicated writer for the test to store output.
+// Reporters usually display the contents on test failure.
+//
+// Valid context: inside S blocks only, nil elsewhere
+func (s S) Out() io.Writer {
+	var out io.Writer
+	s("", nil, func(c *config) {
+		c.out = func(w io.Writer) {
+			out = w
+		}
+	})
+	return out
+}
+
 // Run defines a suite, which is a top-level group of specs.
 // Unlike other testing libraries, it is re-evaluated for each spec.
 //
@@ -92,6 +108,7 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 	}
 
 	return n.run(t, func(t *testing.T, n node) {
+		buffer := &bytes.Buffer{}
 		defer func() {
 			if specs == nil {
 				return
@@ -102,6 +119,7 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 				Skipped:  t.Skipped(),
 				Focused:  n.focus,
 				Parallel: n.order == orderParallel,
+				Out:      buffer,
 			}
 		}()
 		switch {
@@ -134,6 +152,8 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 		}, func(_ string, f func(), opts ...Option) {
 			cfg := options(opts).apply()
 			switch {
+			case cfg.out != nil:
+				cfg.out(buffer)
 			case cfg.before:
 				before = append(before, f)
 			case cfg.after:
@@ -206,6 +226,7 @@ type Spec struct {
 	Skipped  bool
 	Focused  bool
 	Parallel bool
+	Out      io.Reader
 }
 
 // A Reporter is provided with information about a suite as it runs.

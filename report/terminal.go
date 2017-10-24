@@ -2,6 +2,7 @@ package report
 
 import (
 	"fmt"
+	"io/ioutil"
 	"testing"
 
 	"github.com/sclevine/spec"
@@ -29,6 +30,10 @@ func (Terminal) Specs(_ *testing.T, specs <-chan spec.Spec) {
 			failed++
 			if !testing.Verbose() {
 				fmt.Print("x")
+			} else {
+				if out, err := ioutil.ReadAll(s.Out); err == nil {
+					fmt.Printf("%s\n", out)
+				}
 			}
 		case s.Skipped:
 			skipped++
