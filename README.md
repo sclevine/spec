@@ -98,10 +98,10 @@ With less nesting:
 
 ```go
 func TestObject(t *testing.T) {
-    spec.Run(t, testObject)
+    spec.Run(t, "object", testObject)
 }
 
-func testObject(t *testing.T, "object", when spec.G, it spec.S) {
+func testObject(t *testing.T, when spec.G, it spec.S) {
     var someObject myapp.Object
     ...
 }
