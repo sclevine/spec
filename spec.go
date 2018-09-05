@@ -117,12 +117,12 @@ func New(text string, opts ...Option) Suite {
 	report := cfg.report
 
 	return func(text string, f func(*testing.T, G, S), opts ...Option) bool {
-		cfg := options(opts).apply()
-		if cfg.t == nil {
+		if f != nil {
 			suites = append(suites, suite{text, f, opts})
 			return true
 		}
 
+		t := options(opts).apply().t
 		if len(suites) == 1 && suites[0].text == "" && len(suites[0].opts) == 0 {
 			f = suites[0].f
 		} else {
@@ -142,7 +142,7 @@ func New(text string, opts ...Option) Suite {
 
 		var specs chan Spec
 		if report != nil {
-			report.Start(cfg.t, plan)
+			report.Start(t, plan)
 			specs = make(chan Spec, plan.Total)
 			done := make(chan struct{})
 			defer func() {
@@ -150,12 +150,12 @@ func New(text string, opts ...Option) Suite {
 				<-done
 			}()
 			go func() {
-				report.Specs(cfg.t, specs)
+				report.Specs(t, specs)
 				close(done)
 			}()
 		}
 
-		return n.run(cfg.t, func(t *testing.T, n node) {
+		return n.run(t, func(t *testing.T, n node) {
 			buffer := &bytes.Buffer{}
 			defer func() {
 				if specs == nil {
