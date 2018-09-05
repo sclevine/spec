@@ -74,107 +74,136 @@ func (s S) Out() io.Writer {
 	return out
 }
 
-// Run defines a suite, which is a top-level group of specs.
-// Unlike other testing libraries, it is re-evaluated for each spec.
-//
-// Valid Options:
-// Sequential(), Random(), Reverse(), Parallel()
-// Local(), Global(), Flat(), Nested()
-func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bool {
-	cfg := options(opts).apply()
-	n := &node{
-		text:  []string{text},
-		seed:  defaultZero64(cfg.seed, time.Now().Unix()),
-		order: cfg.order.or(orderSequential),
-		scope: cfg.scope.or(scopeLocal),
-		nest:  cfg.nest.or(nestOff),
-		pend:  cfg.pend,
-		focus: cfg.focus,
-	}
-	plan := n.parse(f)
-	var specs chan Spec
-	if cfg.report != nil {
-		cfg.report.Start(t, plan)
-		specs = make(chan Spec, plan.Total)
-		done := make(chan struct{})
-		defer func() {
-			close(specs)
-			<-done
-		}()
-		go func() {
-			cfg.report.Specs(t, specs)
-			close(done)
-		}()
-	}
+type Suite func(text string, f func(*testing.T, G, S), opts ...Option) bool
 
-	return n.run(t, func(t *testing.T, n node) {
-		buffer := &bytes.Buffer{}
-		defer func() {
-			if specs == nil {
-				return
+func (s Suite) Pend(text string, f func(*testing.T, G, S), _ ...Option) bool {
+	return s(text, f, func(c *config) { c.pend = true })
+}
+
+func (s Suite) Focus(text string, f func(*testing.T, G, S), opts ...Option) bool {
+	return s(text, f, append(opts, func(c *config) { c.focus = true })...)
+}
+
+func (s Suite) Run(t *testing.T) bool {
+	return s("", nil, func(c *config) { c.run = t })
+}
+
+func New() Suite {
+	var (
+		suites []func(*testing.T) bool
+		focus  bool
+	)
+
+	return func(text string, f func(*testing.T, G, S), opts ...Option) bool {
+		cfg := options(opts).apply()
+		if cfg.run != nil {
+			ok := true
+			for _, f := range suites {
+				ok = f(cfg.run) && ok
 			}
-			specs <- Spec{
-				Text:     n.text,
-				Failed:   t.Failed(),
-				Skipped:  t.Skipped(),
-				Focused:  n.focus,
-				Parallel: n.order == orderParallel,
-				Out:      buffer,
-			}
-		}()
-		switch {
-		case n.pend, plan.HasFocus && !n.focus:
-			t.SkipNow()
-		case n.order == orderParallel:
-			t.Parallel()
+			return ok
 		}
-		var (
-			spec, group   func()
-			before, after []func()
-			afterIdx      int
-		)
-		group = func() {}
 
-		f(t, func(_ string, f func(), _ ...Option) {
-			switch {
-			case len(n.loc) == 1, n.loc[0] > 0:
-				n.loc[0]--
-			case n.loc[0] == 0:
-				group = func() {
-					n.loc = n.loc[1:]
-					afterIdx = 0
-					group = func() {}
-					f()
-					group()
+		n := &node{
+			text:  []string{text},
+			seed:  defaultZero64(cfg.seed, time.Now().Unix()),
+			order: cfg.order.or(orderSequential),
+			scope: cfg.scope.or(scopeLocal),
+			nest:  cfg.nest.or(nestOff),
+			pend:  cfg.pend,
+			focus: cfg.focus,
+		}
+		plan := n.parse(f)
+		focus = plan.HasFocus || focus
+		plan.HasFocus = focus
+
+		suites = append(suites, func(t *testing.T) bool {
+			var specs chan Spec
+			if cfg.report != nil {
+				cfg.report.Start(t, plan)
+				specs = make(chan Spec, plan.Total)
+				done := make(chan struct{})
+				defer func() {
+					close(specs)
+					<-done
+				}()
+				go func() {
+					cfg.report.Specs(t, specs)
+					close(done)
+				}()
+			}
+
+			return n.run(t, func(t *testing.T, n node) {
+				buffer := &bytes.Buffer{}
+				defer func() {
+					if specs == nil {
+						return
+					}
+					specs <- Spec{
+						Text:     n.text,
+						Failed:   t.Failed(),
+						Skipped:  t.Skipped(),
+						Focused:  n.focus,
+						Parallel: n.order == orderParallel,
+						Out:      buffer,
+					}
+				}()
+				switch {
+				case n.pend, plan.HasFocus && !n.focus:
+					t.SkipNow()
+				case n.order == orderParallel:
+					t.Parallel()
 				}
-				n.loc[0]--
-			}
-		}, func(_ string, f func(), opts ...Option) {
-			cfg := options(opts).apply()
-			switch {
-			case cfg.out != nil:
-				cfg.out(buffer)
-			case cfg.before:
-				before = append(before, f)
-			case cfg.after:
-				after = insert(after, f, afterIdx)
-				afterIdx++
-			case spec != nil:
-			case len(n.loc) > 1, n.loc[0] > 0:
-				n.loc[0]--
-			default:
-				spec = f
-			}
-		})
-		group()
+				var (
+					spec, group   func()
+					before, after []func()
+					afterIdx      int
+				)
+				group = func() {}
 
-		if spec == nil {
-			t.Fatal("Failed to locate spec.")
-		}
-		run(before...)
-		defer run(after...)
-		run(spec)
-	})
+				f(t, func(_ string, f func(), _ ...Option) {
+					switch {
+					case len(n.loc) == 1, n.loc[0] > 0:
+						n.loc[0]--
+					case n.loc[0] == 0:
+						group = func() {
+							n.loc = n.loc[1:]
+							afterIdx = 0
+							group = func() {}
+							f()
+							group()
+						}
+						n.loc[0]--
+					}
+				}, func(_ string, f func(), opts ...Option) {
+					cfg := options(opts).apply()
+					switch {
+					case cfg.out != nil:
+						cfg.out(buffer)
+					case cfg.before:
+						before = append(before, f)
+					case cfg.after:
+						after = insert(after, f, afterIdx)
+						afterIdx++
+					case spec != nil:
+					case len(n.loc) > 1, n.loc[0] > 0:
+						n.loc[0]--
+					default:
+						spec = f
+					}
+				})
+				group()
+
+				if spec == nil {
+					t.Fatal("Failed to locate spec.")
+				}
+				run(before...)
+				defer run(after...)
+				run(spec)
+			})
+		})
+		return true
+	}
 }
 
 func run(fs ...func()) {
@@ -188,6 +217,18 @@ func insert(fs []func(), f func(), i int) []func() {
 	copy(fs[i+1:], fs[i:])
 	fs[i] = f
 	return fs
+}
+
+// Run defines a suite, which is a top-level group of specs.
+// Unlike other testing libraries, it is re-evaluated for each spec.
+//
+// Valid Options:
+// Sequential(), Random(), Reverse(), Parallel()
+// Local(), Global(), Flat(), Nested()
+func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bool {
+	suite := New()
+	suite(text, f, opts...)
+	return suite.Run(t)
 }
 
 // Pend skips the suite.
