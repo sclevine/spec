@@ -85,42 +85,48 @@ func (s Suite) Focus(text string, f func(*testing.T, G, S), opts ...Option) bool
 }
 
 func (s Suite) Run(t *testing.T) bool {
-	return s("", nil, func(c *config) { c.run = t })
+	return s("", nil, func(c *config) { c.t = t })
 }
 
-func New() Suite {
-	var (
-		suites []func(*testing.T) bool
-		focus  bool
-	)
+func New(text string, opts ...Option) Suite {
+	type suite struct {
+		text string
+		f    func(*testing.T, G, S)
+		opts []Option
+	}
+	var suites []suite
+
+	cfg := options(opts).apply()
+	n := &node{
+		text:  []string{text},
+		seed:  defaultZero64(cfg.seed, time.Now().Unix()),
+		order: cfg.order.or(orderSequential),
+		scope: cfg.scope.or(scopeLocal),
+		nest:  cfg.nest.or(nestOff),
+		pend:  cfg.pend,
+		focus: cfg.focus,
+	}
+	report := cfg.report
 
 	return func(text string, f func(*testing.T, G, S), opts ...Option) bool {
 		cfg := options(opts).apply()
-		if cfg.run != nil {
-			ok := true
-			for _, f := range suites {
-				ok = f(cfg.run) && ok
+		if cfg.t != nil {
+			if len(suites) == 1 && suites[0].text == "" && len(suites[0].opts) == 0 {
+				f = suites[0].f
+			} else {
+				f = func(t *testing.T, g G, s S) {
+					for _, st := range suites {
+						// TODO: for before/after, use s()
+						g(st.text, func() { st.f(t, g, s) }, st.opts...)
+					}
+				}
 			}
-			return ok
-		}
 
-		n := &node{
-			text:  []string{text},
-			seed:  defaultZero64(cfg.seed, time.Now().Unix()),
-			order: cfg.order.or(orderSequential),
-			scope: cfg.scope.or(scopeLocal),
-			nest:  cfg.nest.or(nestOff),
-			pend:  cfg.pend,
-			focus: cfg.focus,
-		}
-		plan := n.parse(f)
-		focus = plan.HasFocus || focus
-		plan.HasFocus = focus
+			plan := n.parse(f)
 
-		suites = append(suites, func(t *testing.T) bool {
 			var specs chan Spec
-			if cfg.report != nil {
-				cfg.report.Start(t, plan)
+			if report != nil {
+				report.Start(cfg.t, plan)
 				specs = make(chan Spec, plan.Total)
 				done := make(chan struct{})
 				defer func() {
@@ -128,12 +134,12 @@ func New() Suite {
 					<-done
 				}()
 				go func() {
-					cfg.report.Specs(t, specs)
+					report.Specs(cfg.t, specs)
 					close(done)
 				}()
 			}
 
-			return n.run(t, func(t *testing.T, n node) {
+			return n.run(cfg.t, func(t *testing.T, n node) {
 				buffer := &bytes.Buffer{}
 				defer func() {
 					if specs == nil {
@@ -201,7 +207,8 @@ func New() Suite {
 				defer run(after...)
 				run(spec)
 			})
-		})
+		}
+		suites = append(suites, suite{text, f, opts})
 		return true
 	}
 }
@@ -226,8 +233,8 @@ func insert(fs []func(), f func(), i int) []func() {
 // Sequential(), Random(), Reverse(), Parallel()
 // Local(), Global(), Flat(), Nested()
 func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bool {
-	suite := New()
-	suite(text, f, opts...)
+	suite := New(text, opts...)
+	suite("", f)
 	return suite.Run(t)
 }
 

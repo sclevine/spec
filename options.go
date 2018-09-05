@@ -182,7 +182,7 @@ type config struct {
 	focus  bool
 	before bool
 	after  bool
-	run    *testing.T
+	t      *testing.T
 	out    func(io.Writer)
 	report Reporter
 }
