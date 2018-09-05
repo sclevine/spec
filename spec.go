@@ -76,6 +76,14 @@ func (s S) Out() io.Writer {
 
 type Suite func(text string, f func(*testing.T, G, S), opts ...Option) bool
 
+func (s Suite) Before(f func(*testing.T)) bool {
+	return s("", func(t *testing.T, _ G, _ S) { f(t) }, func(c *config) { c.before = true })
+}
+
+func (s Suite) After(f func(*testing.T)) bool {
+	return s("", func(t *testing.T, _ G, _ S) { f(t) }, func(c *config) { c.after = true })
+}
+
 func (s Suite) Pend(text string, f func(*testing.T, G, S), _ ...Option) bool {
 	return s(text, f, func(c *config) { c.pend = true })
 }
@@ -110,106 +118,111 @@ func New(text string, opts ...Option) Suite {
 
 	return func(text string, f func(*testing.T, G, S), opts ...Option) bool {
 		cfg := options(opts).apply()
-		if cfg.t != nil {
-			if len(suites) == 1 && suites[0].text == "" && len(suites[0].opts) == 0 {
-				f = suites[0].f
-			} else {
-				f = func(t *testing.T, g G, s S) {
-					for _, st := range suites {
-						// TODO: for before/after, use s()
+		if cfg.t == nil {
+			suites = append(suites, suite{text, f, opts})
+			return true
+		}
+
+		if len(suites) == 1 && suites[0].text == "" && len(suites[0].opts) == 0 {
+			f = suites[0].f
+		} else {
+			f = func(t *testing.T, g G, s S) {
+				for _, st := range suites {
+					cfg := options(st.opts).apply()
+					if cfg.before || cfg.after {
+						s("", func () { st.f(t, nil, nil) }, st.opts...)
+					} else {
 						g(st.text, func() { st.f(t, g, s) }, st.opts...)
 					}
 				}
 			}
-
-			plan := n.parse(f)
-
-			var specs chan Spec
-			if report != nil {
-				report.Start(cfg.t, plan)
-				specs = make(chan Spec, plan.Total)
-				done := make(chan struct{})
-				defer func() {
-					close(specs)
-					<-done
-				}()
-				go func() {
-					report.Specs(cfg.t, specs)
-					close(done)
-				}()
-			}
-
-			return n.run(cfg.t, func(t *testing.T, n node) {
-				buffer := &bytes.Buffer{}
-				defer func() {
-					if specs == nil {
-						return
-					}
-					specs <- Spec{
-						Text:     n.text,
-						Failed:   t.Failed(),
-						Skipped:  t.Skipped(),
-						Focused:  n.focus,
-						Parallel: n.order == orderParallel,
-						Out:      buffer,
-					}
-				}()
-				switch {
-				case n.pend, plan.HasFocus && !n.focus:
-					t.SkipNow()
-				case n.order == orderParallel:
-					t.Parallel()
-				}
-				var (
-					spec, group   func()
-					before, after []func()
-					afterIdx      int
-				)
-				group = func() {}
-
-				f(t, func(_ string, f func(), _ ...Option) {
-					switch {
-					case len(n.loc) == 1, n.loc[0] > 0:
-						n.loc[0]--
-					case n.loc[0] == 0:
-						group = func() {
-							n.loc = n.loc[1:]
-							afterIdx = 0
-							group = func() {}
-							f()
-							group()
-						}
-						n.loc[0]--
-					}
-				}, func(_ string, f func(), opts ...Option) {
-					cfg := options(opts).apply()
-					switch {
-					case cfg.out != nil:
-						cfg.out(buffer)
-					case cfg.before:
-						before = append(before, f)
-					case cfg.after:
-						after = insert(after, f, afterIdx)
-						afterIdx++
-					case spec != nil:
-					case len(n.loc) > 1, n.loc[0] > 0:
-						n.loc[0]--
-					default:
-						spec = f
-					}
-				})
-				group()
-
-				if spec == nil {
-					t.Fatal("Failed to locate spec.")
-				}
-				run(before...)
-				defer run(after...)
-				run(spec)
-			})
 		}
-		suites = append(suites, suite{text, f, opts})
-		return true
+
+		plan := n.parse(f)
+
+		var specs chan Spec
+		if report != nil {
+			report.Start(cfg.t, plan)
+			specs = make(chan Spec, plan.Total)
+			done := make(chan struct{})
+			defer func() {
+				close(specs)
+				<-done
+			}()
+			go func() {
+				report.Specs(cfg.t, specs)
+				close(done)
+			}()
+		}
+
+		return n.run(cfg.t, func(t *testing.T, n node) {
+			buffer := &bytes.Buffer{}
+			defer func() {
+				if specs == nil {
+					return
+				}
+				specs <- Spec{
+					Text:     n.text,
+					Failed:   t.Failed(),
+					Skipped:  t.Skipped(),
+					Focused:  n.focus,
+					Parallel: n.order == orderParallel,
+					Out:      buffer,
+				}
+			}()
+			switch {
+			case n.pend, plan.HasFocus && !n.focus:
+				t.SkipNow()
+			case n.order == orderParallel:
+				t.Parallel()
+			}
+			var (
+				spec, group   func()
+				before, after []func()
+				afterIdx      int
+			)
+			group = func() {}
+
+			f(t, func(_ string, f func(), _ ...Option) {
+				switch {
+				case len(n.loc) == 1, n.loc[0] > 0:
+					n.loc[0]--
+				case n.loc[0] == 0:
+					group = func() {
+						n.loc = n.loc[1:]
+						afterIdx = 0
+						group = func() {}
+						f()
+						group()
+					}
+					n.loc[0]--
+				}
+			}, func(_ string, f func(), opts ...Option) {
+				cfg := options(opts).apply()
+				switch {
+				case cfg.out != nil:
+					cfg.out(buffer)
+				case cfg.before:
+					before = append(before, f)
+				case cfg.after:
+					after = insert(after, f, afterIdx)
+					afterIdx++
+				case spec != nil:
+				case len(n.loc) > 1, n.loc[0] > 0:
+					n.loc[0]--
+				default:
+					spec = f
+				}
+			})
+			group()
+
+			if spec == nil {
+				t.Fatal("Failed to locate spec.")
+			}
+			run(before...)
+			defer run(after...)
+			run(spec)
+		})
 	}
 }
 
