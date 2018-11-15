@@ -87,12 +87,18 @@ type Suite func(text string, f func(*testing.T, G, S), opts ...Option) bool
 
 // Before runs a function before each spec in the suite.
 func (s Suite) Before(f func(*testing.T)) bool {
-	return s("", func(t *testing.T, _ G, _ S) { f(t) }, func(c *config) { c.before = true })
+	return s("", func(t *testing.T, _ G, _ S) {
+		t.Helper()
+		f(t)
+	}, func(c *config) { c.before = true })
 }
 
 // After runs a function after each spec in the suite.
 func (s Suite) After(f func(*testing.T)) bool {
-	return s("", func(t *testing.T, _ G, _ S) { f(t) }, func(c *config) { c.after = true })
+	return s("", func(t *testing.T, _ G, _ S) {
+		t.Helper()
+		f(t)
+	}, func(c *config) { c.after = true })
 }
 
 // Pend skips the provided top-level group of specs.
@@ -114,6 +120,7 @@ func (s Suite) Focus(text string, f func(*testing.T, G, S), opts ...Option) bool
 
 // Run executes the specs defined in each top-level group of the suite.
 func (s Suite) Run(t *testing.T) bool {
+	t.Helper()
 	return s("", nil, func(c *config) { c.t = t })
 }
 
@@ -139,6 +146,7 @@ func New(text string, opts ...Option) Suite {
 			})
 			return true
 		}
+		cfg.t.Helper()
 		return Run(cfg.t, text, func(t *testing.T, g G, s S) {
 			for _, f := range fs {
 				f(t, g, s)
