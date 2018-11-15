@@ -155,6 +155,7 @@ func New(text string, opts ...Option) Suite {
 // Local, Global, Flat, Nested
 // Seed, Report
 func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bool {
+	t.Helper()
 	cfg := options(opts).apply()
 	n := &node{
 		text:  []string{text},
@@ -184,6 +185,7 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 	}
 
 	return n.run(t, func(t *testing.T, n node) {
+		t.Helper()
 		buffer := &bytes.Buffer{}
 		defer func() {
 			if specs == nil {
@@ -247,13 +249,14 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 		if spec == nil {
 			t.Fatal("Failed to locate spec.")
 		}
-		run(before...)
-		defer run(after...)
-		run(spec)
+		run(t, before...)
+		defer run(t, after...)
+		run(t, spec)
 	})
 }
 
-func run(fs ...func()) {
+func run(t *testing.T, fs ...func()) {
+	t.Helper()
 	for _, f := range fs {
 		f()
 	}
@@ -270,6 +273,7 @@ func insert(fs []func(), f func(), i int) []func() {
 //
 // All Options are ignored.
 func Pend(t *testing.T, text string, f func(*testing.T, G, S), _ ...Option) bool {
+	t.Helper()
 	return Run(t, text, f, func(c *config) { c.pend = true })
 }
 
@@ -281,6 +285,7 @@ func Pend(t *testing.T, text string, f func(*testing.T, G, S), _ ...Option) bool
 // Local, Global, Flat, Nested
 // Seed, Report
 func Focus(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bool {
+	t.Helper()
 	return Run(t, text, f, append(opts, func(c *config) { c.focus = true })...)
 }
 
