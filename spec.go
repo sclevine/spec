@@ -226,7 +226,7 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 			case n.loc[0] == 0:
 				group = func() {
 					n.loc = n.loc[1:]
-					hooks = hooks.next()
+					hooks.next()
 					group = func() {}
 					f()
 					group()
@@ -258,19 +258,23 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 	})
 }
 
-type specHook struct {
-	before, after []func()
+type specHooks struct {
+	first, last *specHook
 }
 
-type specHooks []specHook
+type specHook struct {
+	before, after []func()
+	next *specHook
+}
 
 func newHooks() specHooks {
-	return specHooks.next(nil)
+	h := &specHook{}
+	return specHooks{first: h, last: h}
 }
 
 func (s specHooks) run(t *testing.T, spec func()) {
 	t.Helper()
-	for _, h := range s {
+	for h := s.first; h != nil; h = h.next {
 		defer run(t, h.after...)
 		run(t, h.before...)
 	}
@@ -278,15 +282,16 @@ func (s specHooks) run(t *testing.T, spec func()) {
 }
 
 func (s specHooks) before(f func()) {
-	s[len(s)-1].before = append(s[len(s)-1].before, f)
+	s.last.before = append(s.last.before, f)
 }
 
 func (s specHooks) after(f func()) {
-	s[len(s)-1].after = append(s[len(s)-1].after, f)
+	s.last.after = append(s.last.after, f)
 }
 
-func (s specHooks) next() specHooks {
-	return append(s, specHook{})
+func (s *specHooks) next() {
+	s.last.next = &specHook{}
+	s.last = s.last.next
 }
 
 func run(t *testing.T, fs ...func()) {

@@ -252,6 +252,33 @@ func TestSFocus(t *testing.T) {
 	}
 }
 
+func TestSBefore(t *testing.T) {
+	s, calls := record(t)
+
+	spec.Run(t, "Run", func(t *testing.T, when spec.G, it spec.S) {
+		it.Before(s(t, "Run.Before.1"))
+		it("Run.S", s(t, "Run.S"))
+		it.Before(s(t, "Run.Before.2"))
+		when("Run.G", func() {
+			it.Before(s(t, "Run.G.Before.1"))
+			it("Run.G.S", s(t, "Run.G.S"))
+			it.Before(s(t, "Run.G.Before.2"))
+		})
+		it.Before(s(t, "Run.Before.3"))
+	})
+
+	if !reflect.DeepEqual(calls(), []string{
+		"Run/Run.S->Run.Before.1", "Run/Run.S->Run.Before.2", "Run/Run.S->Run.Before.3",
+		"Run/Run.S->Run.S",
+
+		"Run/Run.G/Run.G.S->Run.Before.1", "Run/Run.G/Run.G.S->Run.Before.2", "Run/Run.G/Run.G.S->Run.Before.3",
+		"Run/Run.G/Run.G.S->Run.G.Before.1", "Run/Run.G/Run.G.S->Run.G.Before.2",
+		"Run/Run.G/Run.G.S->Run.G.S",
+	}) {
+		t.Fatal("Incorrect order:", calls())
+	}
+}
+
 func TestSuiteBefore(t *testing.T) {
 	s, calls := record(t)
 
@@ -276,33 +303,6 @@ func TestSuiteBefore(t *testing.T) {
 		"Suite/Top/Top.G/Top.G.S->Top.Before",
 		"Suite/Top/Top.G/Top.G.S->Top.G.Before",
 		"Suite/Top/Top.G/Top.G.S->Top.G.S",
-	}) {
-		t.Fatal("Incorrect order:", calls())
-	}
-}
-
-func TestSBefore(t *testing.T) {
-	s, calls := record(t)
-
-	spec.Run(t, "Run", func(t *testing.T, when spec.G, it spec.S) {
-		it.Before(s(t, "Run.Before.1"))
-		it("Run.S", s(t, "Run.S"))
-		it.Before(s(t, "Run.Before.2"))
-		when("Run.G", func() {
-			it.Before(s(t, "Run.G.Before.1"))
-			it("Run.G.S", s(t, "Run.G.S"))
-			it.Before(s(t, "Run.G.Before.2"))
-		})
-		it.Before(s(t, "Run.Before.3"))
-	})
-
-	if !reflect.DeepEqual(calls(), []string{
-		"Run/Run.S->Run.Before.1", "Run/Run.S->Run.Before.2", "Run/Run.S->Run.Before.3",
-		"Run/Run.S->Run.S",
-
-		"Run/Run.G/Run.G.S->Run.Before.1", "Run/Run.G/Run.G.S->Run.Before.2", "Run/Run.G/Run.G.S->Run.Before.3",
-		"Run/Run.G/Run.G.S->Run.G.Before.1", "Run/Run.G/Run.G.S->Run.G.Before.2",
-		"Run/Run.G/Run.G.S->Run.G.S",
 	}) {
 		t.Fatal("Incorrect order:", calls())
 	}
@@ -359,6 +359,29 @@ func TestSuiteAfter(t *testing.T) {
 		"Suite/Top/Top.G/Top.G.S->Top.G.After",
 		"Suite/Top/Top.G/Top.G.S->Top.After",
 		"Suite/Top/Top.G/Top.G.S->After.1", "Suite/Top/Top.G/Top.G.S->After.2",
+	}) {
+		t.Fatal("Incorrect order:", calls())
+	}
+}
+
+func TestSkipAfter(t *testing.T) {
+	s, calls := record(t)
+
+	spec.Run(t, "Run", func(t *testing.T, when spec.G, it spec.S) {
+		it.Before(func() {
+			s(t, "Run.Before")()
+			t.SkipNow()
+		})
+		it.After(s(t, "Run.After"))
+		when("Run.G", func() {
+			it.After(s(t, "Run.G.After"))
+			it("Run.G.S", s(t, "Run.G.S"))
+		})
+	})
+
+	if !reflect.DeepEqual(calls(), []string{
+		"Run/Run.G/Run.G.S->Run.Before",
+		"Run/Run.G/Run.G.S->Run.After",
 	}) {
 		t.Fatal("Incorrect order:", calls())
 	}
