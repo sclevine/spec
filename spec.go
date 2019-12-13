@@ -264,7 +264,7 @@ type specHooks struct {
 
 type specHook struct {
 	before, after []func()
-	next *specHook
+	next          *specHook
 }
 
 func newHooks() specHooks {
