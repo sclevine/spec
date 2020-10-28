@@ -192,7 +192,7 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 		}()
 	}
 
-	return n.run(t, func(t *testing.T, n node) {
+	result := n.run(t, func(t *testing.T, n node) {
 		t.Helper()
 		buffer := &bytes.Buffer{}
 		defer func() {
@@ -256,6 +256,10 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 		}
 		hooks.run(t, spec)
 	})
+	if plan.HasFocus {
+		t.Fatal("Failing due to focus.")
+	}
+	return result
 }
 
 type specHooks struct {
