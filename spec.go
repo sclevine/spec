@@ -2,7 +2,11 @@ package spec
 
 import (
 	"bytes"
+	"fmt"
 	"io"
+	"os"
+	"os/signal"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -182,10 +186,10 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 		report.Start(t, plan)
 		specs = make(chan Spec, plan.Total)
 		done := make(chan struct{})
-		defer func() {
+		t.Cleanup(func() {
 			close(specs)
 			<-done
-		}()
+		})
 		go func() {
 			report.Specs(t, specs)
 			close(done)
@@ -195,7 +199,7 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 	result := n.run(t, func(t *testing.T, n node) {
 		t.Helper()
 		buffer := &bytes.Buffer{}
-		defer func() {
+		t.Cleanup(func() {
 			if specs == nil {
 				return
 			}
@@ -207,13 +211,14 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 				Parallel: n.order == orderParallel,
 				Out:      buffer,
 			}
-		}()
+		})
 		switch {
 		case n.pend, plan.HasFocus && !n.focus:
 			t.SkipNow()
 		case n.order == orderParallel:
 			t.Parallel()
 		}
+		// TODO: quit if signal chan is closed
 
 		var spec, group func()
 		hooks := newHooks()
@@ -279,7 +284,11 @@ func newHooks() specHooks {
 func (s specHooks) run(t *testing.T, spec func()) {
 	t.Helper()
 	for h := s.first; h != nil; h = h.next {
-		defer run(t, h.after...)
+		h := h
+		t.Cleanup(func() {
+			t.Helper()
+			run(t, h.after...)
+		})
 		run(t, h.before...)
 	}
 	run(t, spec)
@@ -358,4 +367,51 @@ type Reporter interface {
 	// The specs will start running concurrently with the Specs method call.
 	// The Run method will not complete until the Specs method call completes.
 	Specs(*testing.T, <-chan Spec)
+}
+
+type Cleaner struct {
+	C    chan struct{}
+	sigs chan os.Signal
+	done chan struct{}
+}
+
+func NewCleaner() Cleaner {
+	c := make(chan struct{})
+	sigs := make(chan os.Signal, 3)
+	done := make(chan struct{})
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		// TODO: stop timer when not in use
+		ticker := time.NewTicker(time.Second)
+		notify := c
+		count := 0
+		for {
+			select {
+			case <-ticker.C:
+				if count > 0 {
+					count--
+				}
+			case <-sigs:
+				if notify != nil {
+					close(notify)
+					notify = nil
+				}
+				if count > 5 {
+					fmt.Fprintln(os.Stderr, "Exiting immediately.")
+					os.Exit(1)
+				}
+				count += 5
+			case <-done:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+	return Cleaner{c, sigs, done}
+}
+
+func (c Cleaner) Close() {
+	signal.Stop(c.sigs)
+	close(c.done)
 }
