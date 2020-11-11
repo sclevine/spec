@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"context"
 	"io"
 	"testing"
 )
@@ -131,6 +132,28 @@ func Nested() Option {
 	}
 }
 
+// Interrupt indicates that the specs should stop running on SIGINT or SIGTERM.
+// Immediately after Interrupt is called, receiving SIGINT or SIGTERM three
+// times within any five second period will immediately exit the program.
+//
+// Valid Option for:
+// New, Run, Focus, Pend
+func Interrupt() Option {
+	return func(c *config) {
+		c.ctx, _ = WithInterrupt(context.Background())
+	}
+}
+
+// Context specifies a context that may signal specs to stop running.
+//
+// Valid Option for:
+// New, Run, Focus, Pend
+func Context(ctx context.Context) Option {
+	return func(c *config) {
+		c.ctx = ctx
+	}
+}
+
 type order int
 
 const (
@@ -194,6 +217,7 @@ type config struct {
 	after  bool
 	t      *testing.T
 	out    func(io.Writer)
+	ctx    context.Context
 	report Reporter
 }
 

@@ -2,6 +2,7 @@ package spec
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -179,6 +180,7 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 		focus: cfg.focus,
 	}
 	report := cfg.report
+	ctx := cfg.ctx
 	plan := n.parse(f)
 
 	var specs chan Spec
@@ -212,13 +214,20 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 				Out:      buffer,
 			}
 		})
+		if ctx != nil {
+			select {
+			case <-ctx.Done():
+				t.SkipNow()
+			default:
+			}
+		}
+
 		switch {
 		case n.pend, plan.HasFocus && !n.focus:
 			t.SkipNow()
 		case n.order == orderParallel:
 			t.Parallel()
 		}
-		// TODO: quit if signal chan is closed
 
 		var spec, group func()
 		hooks := newHooks()
@@ -369,21 +378,19 @@ type Reporter interface {
 	Specs(*testing.T, <-chan Spec)
 }
 
-type Cleaner struct {
-	C    chan struct{}
-	sigs chan os.Signal
-	done chan struct{}
-}
-
-func NewCleaner() Cleaner {
-	c := make(chan struct{})
+// WithInterrupt cancels the provided context when SIGINT or SIGTERM is
+// received. The returned function stops monitoring but does NOT cancel
+// the context. Immediately after WithInterrupt is called, receiving SIGINT or
+// SIGTERM three times within any five second period will immediately exit the
+// program.
+func WithInterrupt(ctx context.Context) (context.Context, func()) {
+	ctx, cancel := context.WithCancel(ctx)
 	sigs := make(chan os.Signal, 3)
 	done := make(chan struct{})
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		var ticker *time.Ticker
-		notify := c
+		ticker := time.NewTicker(time.Second)
 		count := 0
 		for {
 			select {
@@ -392,31 +399,28 @@ func NewCleaner() Cleaner {
 					count--
 				} else {
 					ticker.Stop()
-					ticker = nil
+					ticker.C = nil
 				}
 			case <-sigs:
-				if notify != nil {
-					close(notify)
-					notify = nil
-				}
+				cancel()
 				if count > 5 {
 					fmt.Fprintln(os.Stderr, "Exiting immediately.")
 					os.Exit(1)
 				}
 				count += 5
-				ticker = time.NewTicker(time.Second)
+				if ticker.C == nil {
+					ticker = time.NewTicker(time.Second)
+				}
 			case <-done:
-				if ticker != nil {
+				if ticker.C != nil {
 					ticker.Stop()
 				}
 				return
 			}
 		}
 	}()
-	return Cleaner{c, sigs, done}
-}
-
-func (c Cleaner) Close() {
-	signal.Stop(c.sigs)
-	close(c.done)
+	return ctx, func() {
+		signal.Stop(sigs)
+		close(done)
+	}
 }

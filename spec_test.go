@@ -516,5 +516,5 @@ func TestSpec(t *testing.T) {
 				})
 			})
 		})
-	}, spec.Report(report.Terminal{}))
+	}, spec.Report(report.Terminal{}), spec.Interrupt())
 }
