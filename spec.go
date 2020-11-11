@@ -382,8 +382,7 @@ func NewCleaner() Cleaner {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		// TODO: stop timer when not in use
-		ticker := time.NewTicker(time.Second)
+		var ticker *time.Ticker
 		notify := c
 		count := 0
 		for {
@@ -391,6 +390,9 @@ func NewCleaner() Cleaner {
 			case <-ticker.C:
 				if count > 0 {
 					count--
+				} else {
+					ticker.Stop()
+					ticker = nil
 				}
 			case <-sigs:
 				if notify != nil {
@@ -402,8 +404,11 @@ func NewCleaner() Cleaner {
 					os.Exit(1)
 				}
 				count += 5
+				ticker = time.NewTicker(time.Second)
 			case <-done:
-				ticker.Stop()
+				if ticker != nil {
+					ticker.Stop()
+				}
 				return
 			}
 		}
