@@ -74,11 +74,24 @@ func (s S) Focus(text string, f func(), opts ...Option) {
 func (s S) Out() io.Writer {
 	var out io.Writer
 	s("", nil, func(c *config) {
-		c.out = func(w io.Writer) {
+		c.outFn = func(w io.Writer) {
 			out = w
 		}
 	})
 	return out
+}
+
+// Context provides a context that in cancelled when the spec should exit.
+//
+// Valid context: inside S blocks only, nil elsewhere
+func (s S) Context() context.Context {
+	var ctx context.Context
+	s("", nil, func(c *config) {
+		c.ctxFn = func(c context.Context) {
+			ctx = c
+		}
+	})
+	return ctx
 }
 
 // Suite defines a top-level group of specs within a suite.
@@ -136,7 +149,7 @@ func (s Suite) Run(t *testing.T) bool {
 // Valid Options:
 // Sequential, Random, Reverse, Parallel
 // Local, Global, Flat, Nested
-// Seed, Report
+// Seed, Report, Interrupt, Context, FailFocus
 func New(text string, opts ...Option) Suite {
 	var fs []func(*testing.T, G, S)
 	return func(newText string, f func(*testing.T, G, S), newOpts ...Option) bool {
@@ -166,7 +179,7 @@ func New(text string, opts ...Option) Suite {
 // Valid Options:
 // Sequential, Random, Reverse, Parallel
 // Local, Global, Flat, Nested
-// Seed, Report
+// Seed, Report, Interrupt, Context, FailFocus
 func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bool {
 	t.Helper()
 	cfg := options(opts).apply()
@@ -179,6 +192,7 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 		pend:  cfg.pend,
 		focus: cfg.focus,
 	}
+	failFoc := cfg.failFoc
 	report := cfg.report
 	ctx := cfg.ctx
 	plan := n.parse(f)
@@ -250,8 +264,10 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 		}, func(_ string, f func(), opts ...Option) {
 			cfg := options(opts).apply()
 			switch {
-			case cfg.out != nil:
-				cfg.out(buffer)
+			case cfg.outFn != nil:
+				cfg.outFn(buffer)
+			case cfg.ctxFn != nil:
+				cfg.ctxFn(ctx)
 			case cfg.before:
 				hooks.before(f)
 			case cfg.after:
@@ -270,7 +286,7 @@ func Run(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bo
 		}
 		hooks.run(t, spec)
 	})
-	if plan.HasFocus {
+	if failFoc && plan.HasFocus {
 		t.Fatal("Failing due to focus.")
 	}
 	return result
@@ -337,7 +353,7 @@ func Pend(t *testing.T, text string, f func(*testing.T, G, S), _ ...Option) bool
 // Valid Options:
 // Sequential, Random, Reverse, Parallel
 // Local, Global, Flat, Nested
-// Seed, Report
+// Seed, Report, Interrupt, Context, FailFocus
 func Focus(t *testing.T, text string, f func(*testing.T, G, S), opts ...Option) bool {
 	t.Helper()
 	return Run(t, text, f, append(opts, func(c *config) { c.focus = true })...)

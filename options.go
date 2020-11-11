@@ -154,6 +154,16 @@ func Context(ctx context.Context) Option {
 	}
 }
 
+// FailFocus indicates that any focus should cause the suite to fail.
+//
+// Valid Option for:
+// New, Run, Focus, Pend
+func FailFocus() Option {
+	return func(c *config) {
+		c.failFoc = true
+	}
+}
+
 type order int
 
 const (
@@ -207,18 +217,20 @@ func defaultZero64(next, last int64) int64 {
 }
 
 type config struct {
-	seed   int64
-	order  order
-	scope  scope
-	nest   nest
-	pend   bool
-	focus  bool
-	before bool
-	after  bool
-	t      *testing.T
-	out    func(io.Writer)
-	ctx    context.Context
-	report Reporter
+	seed    int64
+	order   order
+	scope   scope
+	nest    nest
+	before  bool
+	after   bool
+	pend    bool
+	focus   bool
+	failFoc bool
+	t       *testing.T
+	outFn   func(io.Writer)
+	ctxFn   func(ctx context.Context)
+	ctx     context.Context
+	report  Reporter
 }
 
 type options []Option
